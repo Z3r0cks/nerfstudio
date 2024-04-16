@@ -202,14 +202,14 @@ class ViewerDensity:
         
         #------------------------------------------------------
         self.get_density_button = self.viser_server.add_gui_button(
-            label="Get Density", disabled=False, color="cyan", 
+            label="Visualize 3D Scene", disabled=False, color="cyan", 
         )
-        self.get_density_button.on_click(lambda _: self.get_density())
+        self.get_density_button.on_click(lambda _: self.get_density("3D"))
         
-        # self.visualize_density_button = self.viser_server.add_gui_button(
-        #     label="Visualize", disabled=False, color="yellow", 
-        # )
-        # self.visualize_density_button.on_click(lambda _: self.visualize_density())
+        self.visualize_density_button = self.viser_server.add_gui_button(
+            label="Histogram", disabled=False, color="yellow", 
+        )
+        self.visualize_density_button.on_click(lambda _: self.get_density("his"))
         #------------------------------------------------------
         
         tabs = self.viser_server.add_gui_tab_group()
@@ -303,19 +303,19 @@ class ViewerDensity:
             f.write(str(data))
             # print(f'{directions=}'.split('=')[0])
             
-    def get_density(self) -> None:
+    def get_density(self, type: str) -> None:
         
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(device)
+
         # examble
-        origins = torch.rand((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
+        origins = torch.zeros((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
         directions = torch.rand((10, 3), device=device)  # 10 direction vectors (normalized)
         directions = directions / torch.norm(directions, dim=1, keepdim=True)  # direction vectors normalizing
         pixel_area = torch.ones((10, 1), device=device)  # area of pixel with 1 m distance from origin
 
-        self.write_to_file(origins, "origins")
-        self.write_to_file(directions, "directions")
-        self.write_to_file(pixel_area, "pixel_area")
+        # self.write_to_file(origins, "origins")
+        # self.write_to_file(directions, "directions")
+        # self.write_to_file(pixel_area, "pixel_area")
         
         # optional attriutes
         camera_indices = torch.randint(low=0, high=5, size=(10, 1), device=device)
@@ -335,26 +335,55 @@ class ViewerDensity:
         )
         model = self.pipeline.model.to(device)
         outputs = model.get_outputs(ray_bundle)
-        density = outputs["density"]
+        density: torch.Tensor = outputs["density"]
         # print(density.shape): torch.Size([10, 48, 1])
-        self.visualize_density(origins, directions, density)
+        if type == "his":
+            self.visualize_density_histogram(density)
+        else:
+            self.visualize_density_3d(origins, directions, density)
+    
+    def visualize_density_histogram(self, density: torch.Tensor) -> None:
+        # Density histogram along the rays
+        density = density.cpu().detach().numpy().squeeze()
+        fig = go.Figure()
+        for i, single_ray_density in enumerate(density):
+            fig.add_trace(go.Scatter(y=single_ray_density, mode='lines', name=f'Ray {i}'))        
+        fig.update_layout(title='Density along rays', 
+                          xaxis_title='Sample along ray', 
+                          yaxis_title='Density',
+                          legend_title='Ray Index')
+        fig.show()
         
-    def visualize_density(self, origins, direction, density: torch.Tensor) -> None:
+    def visualize_density_3d(self, origins, direction, density: torch.Tensor) -> None:
+        
+        density_threshold = 0.3
         device = density.device
-        print(device)
         density = density.squeeze() #remove singlar dimension
         max_density = density.max()
         density_normalized = density / max_density
         
         ray_length = torch.linspace(0, 1, density.shape[1], device=device) # generate line space along the ray
-        print(origins.device)
-        print(direction.device)
-        print(ray_length.device)
         ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None] # generate points along the ray
 
+        # find the first point where density exceeds the threshold
+        threshold_mask = density_normalized > density_threshold
+        first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
         
-        x, y, z = ray_points[...,0].numpy(), ray_points[...,1].numpy(), ray_points[...,2].numpy()
-        color = density_normalized.numpy() # color based on density
+        # ensure you consider cases where no points exceed by checking the condition
+        valid_mask = threshold_mask.any(dim=1)
+        first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
+        
+        # filter all points after the threshold exceedance
+        valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
+        
+        # calculate the ray points only up to the first exceedance
+        ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None]
+        ray_points = ray_points[valid_points_mask]
+        density_normalized = density_normalized[valid_points_mask]
+        
+        # ürepare data for plotting
+        x, y, z = ray_points[..., 0].cpu().numpy(), ray_points[..., 1].cpu().numpy(), ray_points[..., 2].cpu().numpy()
+        color = density_normalized.detach().cpu().numpy() # color based on density
         
         # create 3d plot
         trace = go.Scatter3d(
@@ -380,17 +409,7 @@ class ViewerDensity:
         
         fig = go.Figure(data=[trace], layout=layout)
         fig.show()
-        
-        # Density histogram along the rays
-        # density = density.cpu().detach().numpy().squeeze()
-        # fig = go.Figure()
-        # for i, single_ray_density in enumerate(density):
-        #     fig.add_trace(go.Scatter(y=single_ray_density, mode='lines', name=f'Ray {i}'))        
-        # fig.update_layout(title='Density along rays', 
-        #                   xaxis_title='Sample along ray', 
-        #                   yaxis_title='Density',
-        #                   legend_title='Ray Index')
-        # fig.show()
+    
         
         # ----------------------------------------------------------------------------------------------------
         

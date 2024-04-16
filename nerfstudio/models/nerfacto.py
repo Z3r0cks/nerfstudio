@@ -302,7 +302,6 @@ class NerfactoModel(Model):
         ray_samples: RaySamples
         ray_samples, weights_list, ray_samples_list = self.proposal_sampler(ray_bundle, density_fns=self.density_fns)
         field_outputs = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
-        open("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/ray_samples.txt", "w").write(str(ray_samples))
         if self.config.use_gradient_scaling:
             field_outputs = scale_gradients_by_distance_squared(field_outputs, ray_samples)
 
