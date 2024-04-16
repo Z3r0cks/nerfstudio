@@ -29,6 +29,7 @@ import viser.transforms as vtf
 from typing_extensions import assert_never
 #-------------------------------------------------------------
 import matplotlib.pyplot as plt
+plt.switch_backend('agg')
 import plotly.graph_objects as go
 
 from nerfstudio.cameras.camera_optimizers import CameraOptimizer
@@ -297,32 +298,32 @@ class ViewerDensity:
         self.ready = True
 
     #------------------------------------------------------
+    def write_to_file(self, data, path: str) -> None:
+        with open("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/prompt/" + path + ".txt", "w") as f:
+            f.write(str(data))
+            # print(f'{directions=}'.split('=')[0])
+            
     def get_density(self) -> None:
         
-        import threading # delayed for performance reasons
-        
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print(device)
         # examble
-        origins = torch.rand((10, 3))  # 10 Rays, 3 Dimensions (X, Y, Z)
-        directions = torch.rand((10, 3))  # 10 Richtungsvektoren (normalisiert)
-        directions = directions / torch.norm(directions, dim=1, keepdim=True)  # Richtungsvektoren normalisieren
-        pixel_area = torch.ones((10, 1))  # Fläche der Pixel bei einer Distanz von 1 vom Ursprung
+        origins = torch.rand((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
+        directions = torch.rand((10, 3), device=device)  # 10 direction vectors (normalized)
+        directions = directions / torch.norm(directions, dim=1, keepdim=True)  # direction vectors normalizing
+        pixel_area = torch.ones((10, 1), device=device)  # area of pixel with 1 m distance from origin
 
-        # Optionale Attribute
-        camera_indices = torch.randint(low=0, high=5, size=(10, 1))  # Annahme, dass 5 Kameras vorhanden sind
-        nears = torch.zeros((10, 1))  # Beginn des Sampling entlang des Rays
-        fars = torch.ones((10, 1)) * 10  # Ende des Sampling entlang des Rays
-        times = torch.linspace(0, 1, 10).view(-1, 1)  # Zeitpunkte, zu denen Rays gesampelt werden
+        self.write_to_file(origins, "origins")
+        self.write_to_file(directions, "directions")
+        self.write_to_file(pixel_area, "pixel_area")
         
-        # Verschieben Sie Ihre Tensoren auf das ausgewählte Gerät
-        origins = origins.to(device)
-        directions = directions.to(device)
-        pixel_area = pixel_area.to(device)
-        camera_indices = camera_indices.to(device)
-        nears = nears.to(device)
-        fars = fars.to(device)
-        times = times.to(device)
-        # Erstellen des RayBundle-Objekts
+        # optional attriutes
+        camera_indices = torch.randint(low=0, high=5, size=(10, 1), device=device)
+        nears = torch.zeros((10, 1), device=device)  # begin from sampling alont the rays
+        fars = torch.ones((10, 1), device=device) * 10  # end
+        times = torch.linspace(0, 1, 10, device=device).view(-1, 1)  # time for sampling
+        
+        # create ray bundle
         ray_bundle = RayBundle(
             origins=origins,
             directions=directions,
@@ -332,28 +333,87 @@ class ViewerDensity:
             fars=fars,
             times=times
         )
-        model = self.pipeline.model
+        model = self.pipeline.model.to(device)
         outputs = model.get_outputs(ray_bundle)
         density = outputs["density"]
-        threading.Thread(target=self.visualize_density, args=(density,)).start()
+        # print(density.shape): torch.Size([10, 48, 1])
+        self.visualize_density(origins, directions, density)
         
-    def visualize_density(self, density: torch.Tensor) -> None:
+    def visualize_density(self, origins, direction, density: torch.Tensor) -> None:
+        device = density.device
+        print(device)
+        density = density.squeeze() #remove singlar dimension
+        max_density = density.max()
+        density_normalized = density / max_density
+        
+        ray_length = torch.linspace(0, 1, density.shape[1], device=device) # generate line space along the ray
+        print(origins.device)
+        print(direction.device)
+        print(ray_length.device)
+        ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None] # generate points along the ray
+
+        
+        x, y, z = ray_points[...,0].numpy(), ray_points[...,1].numpy(), ray_points[...,2].numpy()
+        color = density_normalized.numpy() # color based on density
+        
+        # create 3d plot
+        trace = go.Scatter3d(
+            x=x.ravel(), y=y.ravel(), z=z.ravel(), # flatten the points
+            mode='markers',
+            marker = dict(
+                size=2,
+                color=color.ravel(),
+                colorscale='Viridis',
+                opacity =.8,
+                colorbar=dict(title='Normalized Density')
+            )
+        )
+        
+        layout = go.Layout(
+            title="3D Density Visualization",
+            scene=dict(
+                xaxis=dict(title='X'),
+                yaxis=dict(title='Y'),
+                zaxis=dict(title='Z')
+            )
+        )
+        
+        fig = go.Figure(data=[trace], layout=layout)
+        fig.show()
+        
+        # Density histogram along the rays
+        # density = density.cpu().detach().numpy().squeeze()
+        # fig = go.Figure()
+        # for i, single_ray_density in enumerate(density):
+        #     fig.add_trace(go.Scatter(y=single_ray_density, mode='lines', name=f'Ray {i}'))        
+        # fig.update_layout(title='Density along rays', 
+        #                   xaxis_title='Sample along ray', 
+        #                   yaxis_title='Density',
+        #                   legend_title='Ray Index')
+        # fig.show()
+        
+        # ----------------------------------------------------------------------------------------------------
+        
         # Entfernen Sie die zusätzliche Dimension
-        density = density.squeeze(-1)
+        # density = density.squeeze(-1)
 
-        # Überprüfen Sie, ob density jetzt eine 2D-Tensor der Form (num_rays, num_samples) ist
-        assert len(density.shape) == 2
-        num_rays = density.shape[0]
+        # # Überprüfen Sie, ob density jetzt eine 2D-Tensor der Form (num_rays, num_samples) ist
+        # assert len(density.shape) == 2
+        # num_rays = density.shape[0]
+        
+        # fig = go.Figure()
 
-        # Zeichnen Sie für jeden Strahl eine Linie
-        for i in range(num_rays):
-            plt.plot(density[i].cpu().detach().numpy(), label=f"Strahl {i}")
+        # # Zeichnen Sie für jeden Strahl eine Linie
+        # for i in range(num_rays):
+        #     plt.plot(density[i].cpu().detach().numpy(), label=f"Strahl {i}")
 
-        plt.legend()
-        plt.xlabel("Sample entlang des Strahls")
-        plt.ylabel("Dichte")
-        plt.draw()  # Aktualisieren Sie den Plot
-        plt.pause(0.001)  # Kurze Pause, um das GUI-Event-Loop zu erlauben, Updates zu verarbeiten
+        # plt.legend()
+        # plt.xlabel("Sample entlang des Strahls")
+        # plt.ylabel("Dichte")
+        # plt.draw()  # Aktualisieren Sie den Plot
+        # plt.savefig("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/density.png")
+        # print("finished")
+        # plt.pause(0.001)  # Kurze Pause, um das GUI-Event-Loop zu erlauben, Updates zu verarbeiten
         # # Angenommen, density ist ein 2D-Tensor der Form (num_rays, num_samples)
         # assert len(density.shape) == 2
         # num_rays = density.shape[0]
