@@ -137,7 +137,7 @@ class CameraOptimizer(nn.Module):
             if self.non_trainable_camera_indices.device != self.pose_adjustment.device:
                 self.non_trainable_camera_indices = self.non_trainable_camera_indices.to(self.pose_adjustment.device)
             outputs[0][self.non_trainable_camera_indices] = torch.eye(4, device=self.pose_adjustment.device)[:3, :4]
-
+        self.device = "cuda:0"
         # Return: identity if no transforms are needed, otherwise multiply transforms together.
         if len(outputs) == 0:
             # Note that using repeat() instead of tile() here would result in unnecessary copies.
@@ -147,6 +147,7 @@ class CameraOptimizer(nn.Module):
     def apply_to_raybundle(self, raybundle: RayBundle) -> None:
         """Apply the pose correction to the raybundle"""
         if self.config.mode != "off":
+            print(self.device)
             correction_matrices = self(raybundle.camera_indices.squeeze())  # type: ignore
             raybundle.origins = raybundle.origins + correction_matrices[:, :3, 3]
             raybundle.directions = torch.bmm(correction_matrices[:, :3, :3], raybundle.directions[..., None]).squeeze()

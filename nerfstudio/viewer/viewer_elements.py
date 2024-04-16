@@ -42,6 +42,7 @@ from nerfstudio.viewer.utils import CameraState, get_camera
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
+    from nerfstudio.viewer.viewer_density import ViewerDensity
 
 TValue = TypeVar("TValue")
 TString = TypeVar("TString", default=str, bound=str)
@@ -86,14 +87,14 @@ class ViewerControl:
     class for exposing non-gui controls of the viewer to the user
     """
 
-    def _setup(self, viewer: Viewer):
+    def _setup(self, viewer: Viewer | ViewerDensity):
         """
         Internal use only, setup the viewer control with the viewer state object
 
         Args:
             viewer: The viewer object (viewer.py)
         """
-        self.viewer: Viewer = viewer
+        self.viewer: Viewer | ViewerDensity = viewer
         self.viser_server: ViserServer = viewer.viser_server
 
     def set_pose(

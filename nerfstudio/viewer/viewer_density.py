@@ -20,12 +20,16 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
+import os
 import numpy as np
 import torch
 import viser
 import viser.theme
 import viser.transforms as vtf
 from typing_extensions import assert_never
+#-------------------------------------------------------------
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 from nerfstudio.cameras.camera_optimizers import CameraOptimizer
 from nerfstudio.cameras.cameras import CameraType
@@ -47,7 +51,9 @@ from nerfstudio.viewer_legacy.server import viewer_utils
 from nerfstudio.fields.base_field import Field
 from nerfstudio.fields.nerfacto_field import NerfactoField
 from nerfstudio.fields.density_fields import HashMLPDensityField
-from nerfstudio.cameras.rays import Frustums, RaySamples
+from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
+from mpl_toolkits.mplot3d import Axes3D
+
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
@@ -57,7 +63,7 @@ VISER_NERFSTUDIO_SCALE_RATIO: float = 10.0
 
 
 @decorate_all([check_main_thread])
-class Viewer:
+class ViewerDensity:
     """Class to hold state for viewer variables
 
     Args:
@@ -82,13 +88,13 @@ class Viewer:
         log_filename: Path,
         datapath: Path,
         pipeline: Pipeline,
-        trainer: Optional[Trainer] = None,
+        # trainer: Optional[Trainer] = None,
         train_lock: Optional[threading.Lock] = None,
         share: bool = False,
     ):
         self.ready = False  # Set to True at end of constructor.
         self.config = config
-        self.trainer = trainer
+        # self.trainer = trainer
         self.last_step = 0
         self.train_lock = train_lock
         self.pipeline = pipeline
@@ -164,40 +170,45 @@ class Viewer:
         self.viser_server.on_client_disconnect(self.handle_disconnect)
         self.viser_server.on_client_connect(self.handle_new_client)
 
-        # Populate the header, which includes the pause button, train cam button, and stats
-        self.pause_train = self.viser_server.add_gui_button(
-            label="Pause Training", disabled=False, icon=viser.Icon.PLAYER_PAUSE_FILLED
-        )
+        # # Populate the header, which includes the pause button, train cam button, and stats
+        # self.pause_train = self.viser_server.add_gui_button(
+        #     label="Pause Training", disabled=False, icon=viser.Icon.PLAYER_PAUSE_FILLED
+        # )
         
         
-        self.pause_train.on_click(lambda _: self.toggle_pause_button())
-        self.pause_train.on_click(lambda han: self._toggle_training_state(han))
-        self.resume_train = self.viser_server.add_gui_button(
-            label="Resume Training", disabled=False, icon=viser.Icon.PLAYER_PLAY_FILLED
-        )
-        self.resume_train.on_click(lambda _: self.toggle_pause_button())
-        self.resume_train.on_click(lambda han: self._toggle_training_state(han))
-        self.resume_train.visible = False
+        # self.pause_train.on_click(lambda _: self.toggle_pause_button())
+        # self.pause_train.on_click(lambda han: self._toggle_training_state(han))
+        # self.resume_train = self.viser_server.add_gui_button(
+        #     label="Resume Training", disabled=False, icon=viser.Icon.PLAYER_PLAY_FILLED
+        # )
+        # self.resume_train.on_click(lambda _: self.toggle_pause_button())
+        # self.resume_train.on_click(lambda han: self._toggle_training_state(han))
+        # self.resume_train.visible = False
         # Add buttons to toggle training image visibility
-        self.hide_images = self.viser_server.add_gui_button(
-            label="Hide Train Cams", disabled=False, icon=viser.Icon.EYE_OFF, color=None
-        )
-        self.hide_images.on_click(lambda _: self.set_camera_visibility(False))
-        self.hide_images.on_click(lambda _: self.toggle_cameravis_button())
-        self.show_images = self.viser_server.add_gui_button(
-            label="Show Train Cams", disabled=False, icon=viser.Icon.EYE, color=None
-        )
-        self.show_images.on_click(lambda _: self.set_camera_visibility(True))
-        self.show_images.on_click(lambda _: self.toggle_cameravis_button())
-        self.show_images.visible = False
+        # self.hide_images = self.viser_server.add_gui_button(
+        #     label="Hide Train Cams", disabled=False, icon=viser.Icon.EYE_OFF, color=None
+        # )
+        # self.hide_images.on_click(lambda _: self.set_camera_visibility(False))
+        # self.hide_images.on_click(lambda _: self.toggle_cameravis_button())
+        # self.show_images = self.viser_server.add_gui_button(
+        #     label="Show Train Cams", disabled=False, icon=viser.Icon.EYE, color=None
+        # )
+        # self.show_images.on_click(lambda _: self.set_camera_visibility(True))
+        # self.show_images.on_click(lambda _: self.toggle_cameravis_button())
+        # self.show_images.visible = False
         mkdown = self.make_stats_markdown(0, "0x0px")
         self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
         
         #------------------------------------------------------
-        self.test_button = self.viser_server.add_gui_button(
-            label="Test Button", disabled=False, color="cyan", 
+        self.get_density_button = self.viser_server.add_gui_button(
+            label="Get Density", disabled=False, color="cyan", 
         )
-        self.test_button.on_click(lambda _: self.print_log())
+        self.get_density_button.on_click(lambda _: self.get_density())
+        
+        # self.visualize_density_button = self.viser_server.add_gui_button(
+        #     label="Visualize", disabled=False, color="yellow", 
+        # )
+        # self.visualize_density_button.on_click(lambda _: self.visualize_density())
         #------------------------------------------------------
         
         tabs = self.viser_server.add_gui_tab_group()
@@ -218,8 +229,8 @@ class Viewer:
                 self.viser_server, config_path, self.datapath, self.control_panel
             )
 
-        with tabs.add_tab("Export", viser.Icon.PACKAGE_EXPORT):
-            populate_export_tab(self.viser_server, self.control_panel, config_path, self.pipeline.model)
+        # with tabs.add_tab("Export", viser.Icon.PACKAGE_EXPORT):
+        #     populate_export_tab(self.viser_server, self.control_panel, config_path, self.pipeline.model)
 
         # Keep track of the pointers to generated GUI folders, because each generated folder holds a unique ID.
         viewer_gui_folders = dict()
@@ -286,39 +297,139 @@ class Viewer:
         self.ready = True
 
     #------------------------------------------------------
-    def print_log(self) -> None:
+    def get_density(self) -> None:
         
-        origins = torch.tensor([[0.0, 0.0, 0.0]]) # origin of the ray in 3d
-        direction = torch.tensor([[1.0, 0.0, 0.0]]) # direction of the ray in 3d
+        import threading # delayed for performance reasons
         
-        nun_sample = 1 # number of samples to take along the ray
-        starts = torch.zeros(nun_sample, 1)	# start of the ray
-        ends = torch.linspace(0.0, 1.0, nun_sample).view(-1, 1) # end of the ray
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # examble
+        origins = torch.rand((10, 3))  # 10 Rays, 3 Dimensions (X, Y, Z)
+        directions = torch.rand((10, 3))  # 10 Richtungsvektoren (normalisiert)
+        directions = directions / torch.norm(directions, dim=1, keepdim=True)  # Richtungsvektoren normalisieren
+        pixel_area = torch.ones((10, 1))  # Fläche der Pixel bei einer Distanz von 1 vom Ursprung
+
+        # Optionale Attribute
+        camera_indices = torch.randint(low=0, high=5, size=(10, 1))  # Annahme, dass 5 Kameras vorhanden sind
+        nears = torch.zeros((10, 1))  # Beginn des Sampling entlang des Rays
+        fars = torch.ones((10, 1)) * 10  # Ende des Sampling entlang des Rays
+        times = torch.linspace(0, 1, 10).view(-1, 1)  # Zeitpunkte, zu denen Rays gesampelt werden
         
-        # create frustrum
-        frustrum = Frustums(
+        # Verschieben Sie Ihre Tensoren auf das ausgewählte Gerät
+        origins = origins.to(device)
+        directions = directions.to(device)
+        pixel_area = pixel_area.to(device)
+        camera_indices = camera_indices.to(device)
+        nears = nears.to(device)
+        fars = fars.to(device)
+        times = times.to(device)
+        # Erstellen des RayBundle-Objekts
+        ray_bundle = RayBundle(
             origins=origins,
-            directions=direction,
-            starts=starts,
-            ends=ends,
-            pixel_area=torch.ones_like(starts),
+            directions=directions,
+            pixel_area=pixel_area,
+            camera_indices=camera_indices,
+            nears=nears,
+            fars=fars,
+            times=times
         )
+        model = self.pipeline.model
+        outputs = model.get_outputs(ray_bundle)
+        density = outputs["density"]
+        threading.Thread(target=self.visualize_density, args=(density,)).start()
         
-        #create ray samples
-        ray_samples = RaySamples(
-            frustums=frustrum
-        )
-        field = Field()
-        density, _ = field.get_density(ray_samples)
+    def visualize_density(self, density: torch.Tensor) -> None:
+        # Entfernen Sie die zusätzliche Dimension
+        density = density.squeeze(-1)
+
+        # Überprüfen Sie, ob density jetzt eine 2D-Tensor der Form (num_rays, num_samples) ist
+        assert len(density.shape) == 2
+        num_rays = density.shape[0]
+
+        # Zeichnen Sie für jeden Strahl eine Linie
+        for i in range(num_rays):
+            plt.plot(density[i].cpu().detach().numpy(), label=f"Strahl {i}")
+
+        plt.legend()
+        plt.xlabel("Sample entlang des Strahls")
+        plt.ylabel("Dichte")
+        plt.draw()  # Aktualisieren Sie den Plot
+        plt.pause(0.001)  # Kurze Pause, um das GUI-Event-Loop zu erlauben, Updates zu verarbeiten
+        # # Angenommen, density ist ein 2D-Tensor der Form (num_rays, num_samples)
+        # assert len(density.shape) == 2
+        # num_rays = density.shape[0]
+
+        # # Für jeden Strahl eine Linie zeichnen
+        # for i in range(num_rays):
+        #     plt.plot(density[i], label=f"Ray {i}")
+
+        # plt.legend()
+        # plt.xlabel("Sample entlang des Strahls")
+        # plt.ylabel("Dichte")
+        # plt.show()
+
+        
+        # density = torch.rand(10, 10)  # Beispiel-Daten
+
+        # plt.imshow(density.numpy(), cmap='hot', interpolation='nearest')
+        # plt.colorbar()  # Zeigt die Farbskala an
+        # plt.show()(
+        
+        # x, y, z = np.random.rand(3, 100) * 100
+        # density = np.random.rand(100)
+        
+        # trace = go.Scatter3d(
+        #     x=x, y=y, z=z,
+        #     mode='markers',
+        #     marker = dict(
+        #         size=12,
+        #         color=density,
+        #         colorscale='Viridis',
+        #         opacity =.8
+        #     )
+        # )
+        
+        # fig = go.Figure(data=[trace])
+        # fig.show()
+    
+        
+        # aabb = torch.tensor([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]])
+        # num_images = self._pick_drawn_image_idxs(len(train_dataset))
+        
+        # field = NerfactoField(aabb, num_images, )
+        
+        
+        # model.
+        # origins = torch.tensor([[0.0, 0.0, 0.0]]) # origin of the ray in 3d
+        # direction = torch.tensor([[1.0, 0.0, 0.0]]) # direction of the ray in 3d
+        
+        # nun_sample = 1 # number of samples to take along the ray
+        # starts = torch.zeros(nun_sample, 1)	# start of the ray
+        # ends = torch.linspace(0.0, 1.0, nun_sample).view(-1, 1) # end of the ray
+        
+        # # create frustrum
+        # frustrum = Frustums(
+        #     origins=origins,
+        #     directions=direction,
+        #     starts=starts,
+        #     ends=ends,
+        #     pixel_area=torch.ones_like(starts),
+        # )
+        
+        # #create ray samples
+        # ray_samples = RaySamples(
+        #     frustums=frustrum
+        # )
+        # field = Field()
+        # density, _ = field.get_density(ray_samples)
     #------------------------------------------------------
     
-    def toggle_pause_button(self) -> None:
-        self.pause_train.visible = not self.pause_train.visible
-        self.resume_train.visible = not self.resume_train.visible
+    # def toggle_pause_button(self) -> None:
+    #     self.pause_train.visible = not self.pause_train.visible
+    #     self.resume_train.visible = not self.resume_train.visible
 
-    def toggle_cameravis_button(self) -> None:
-        self.hide_images.visible = not self.hide_images.visible
-        self.show_images.visible = not self.show_images.visible
+    # def toggle_cameravis_button(self) -> None:
+    #     self.hide_images.visible = not self.hide_images.visible
+    #     self.show_images.visible = not self.show_images.visible
 
     def make_stats_markdown(self, step: Optional[int], res: Optional[str]) -> str:
         # if either are None, read it from the current stats_markdown content
@@ -372,6 +483,7 @@ class Viewer:
     def handle_new_client(self, client: viser.ClientHandle) -> None:
         self.render_statemachines[client.client_id] = RenderStateMachine(self, VISER_NERFSTUDIO_SCALE_RATIO, client)
         self.render_statemachines[client.client_id].start()
+        
 
         @client.camera.on_update
         def _(_: viser.CameraHandle) -> None:
@@ -382,35 +494,35 @@ class Viewer:
                 camera_state = self.get_camera_state(client)
                 self.render_statemachines[client.client_id].action(RenderAction("move", camera_state))
 
-    def set_camera_visibility(self, visible: bool) -> None:
-        """Toggle the visibility of the training cameras."""
-        with self.viser_server.atomic():
-            for idx in self.camera_handles:
-                self.camera_handles[idx].visible = visible
+    # def set_camera_visibility(self, visible: bool) -> None:
+    #     """Toggle the visibility of the training cameras."""
+    #     with self.viser_server.atomic():
+    #         for idx in self.camera_handles:
+    #             self.camera_handles[idx].visible = visible
 
-    def update_camera_poses(self):
-        # TODO this fn accounts for like ~5% of total train time
-        # Update the train camera locations based on optimization
-        assert self.camera_handles is not None
-        if hasattr(self.pipeline.datamanager, "train_camera_optimizer"):
-            camera_optimizer = self.pipeline.datamanager.train_camera_optimizer
-        elif hasattr(self.pipeline.model, "camera_optimizer"):
-            camera_optimizer = self.pipeline.model.camera_optimizer
-        else:
-            return
-        idxs = list(self.camera_handles.keys())
-        with torch.no_grad():
-            assert isinstance(camera_optimizer, CameraOptimizer)
-            c2ws_delta = camera_optimizer(torch.tensor(idxs, device=camera_optimizer.device)).cpu().numpy()
-        for i, key in enumerate(idxs):
-            # both are numpy arrays
-            c2w_orig = self.original_c2w[key]
-            c2w_delta = c2ws_delta[i, ...]
-            c2w = c2w_orig @ np.concatenate((c2w_delta, np.array([[0, 0, 0, 1]])), axis=0)
-            R = vtf.SO3.from_matrix(c2w[:3, :3])  # type: ignore
-            R = R @ vtf.SO3.from_x_radians(np.pi)
-            self.camera_handles[key].position = c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO
-            self.camera_handles[key].wxyz = R.wxyz
+    # def update_camera_poses(self):
+    #     # TODO this fn accounts for like ~5% of total train time
+    #     # Update the train camera locations based on optimization
+    #     assert self.camera_handles is not None
+    #     if hasattr(self.pipeline.datamanager, "train_camera_optimizer"):
+    #         camera_optimizer = self.pipeline.datamanager.train_camera_optimizer
+    #     elif hasattr(self.pipeline.model, "camera_optimizer"):
+    #         camera_optimizer = self.pipeline.model.camera_optimizer
+    #     else:
+    #         return
+    #     idxs = list(self.camera_handles.keys())
+    #     with torch.no_grad():
+    #         assert isinstance(camera_optimizer, CameraOptimizer)
+    #         c2ws_delta = camera_optimizer(torch.tensor(idxs, device=camera_optimizer.device)).cpu().numpy()
+    #     for i, key in enumerate(idxs):
+    #         # both are numpy arrays
+    #         c2w_orig = self.original_c2w[key]
+    #         c2w_delta = c2ws_delta[i, ...]
+    #         c2w = c2w_orig @ np.concatenate((c2w_delta, np.array([[0, 0, 0, 1]])), axis=0)
+    #         R = vtf.SO3.from_matrix(c2w[:3, :3])  # type: ignore
+    #         R = R @ vtf.SO3.from_x_radians(np.pi)
+    #         self.camera_handles[key].position = c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO
+    #         self.camera_handles[key].wxyz = R.wxyz
 
     def _trigger_rerender(self) -> None:
         """Interrupt current render."""
@@ -421,13 +533,13 @@ class Viewer:
             camera_state = self.get_camera_state(clients[id])
             self.render_statemachines[id].action(RenderAction("move", camera_state))
 
-    def _toggle_training_state(self, _) -> None:
-        """Toggle the trainer's training state."""
-        if self.trainer is not None:
-            if self.trainer.training_state == "training":
-                self.trainer.training_state = "paused"
-            elif self.trainer.training_state == "paused":
-                self.trainer.training_state = "training"
+    # def _toggle_training_state(self, _) -> None:
+    #     """Toggle the trainer's training state."""
+    #     if self.trainer is not None:
+    #         if self.trainer.training_state == "training":
+    #             self.trainer.training_state = "paused"
+    #         elif self.trainer.training_state == "paused":
+    #             self.trainer.training_state = "training"
 
     def _output_type_change(self, _):
         self.output_type_changed = True
@@ -451,105 +563,106 @@ class Viewer:
         # draw indices, roughly evenly spaced
         return np.linspace(0, total_num - 1, num_display_images, dtype=np.int32).tolist()
 
-    def init_scene(
-        self,
-        train_dataset: InputDataset,
-        train_state: Literal["training", "paused", "completed"],
-        eval_dataset: Optional[InputDataset] = None,
-    ) -> None:
-        """Draw some images and the scene aabb in the viewer.
+    # def init_scene(
+    #     self,
+    #     train_dataset: InputDataset,
+    #     train_state: Literal["training", "paused", "completed"],
+    #     eval_dataset: Optional[InputDataset] = None,
+    # ) -> None:
+    #     """Draw some images and the scene aabb in the viewer.
 
-        Args:
-            dataset: dataset to render in the scene
-            train_state: Current status of training
-        """
-    
+    #     Args:
+    #         dataset: dataset to render in the scene
+    #         train_state: Current status of training
+    #     """
         #viewer_state.init_scene(
             # train_dataset=pipeline.datamanager.train_dataset,
             # train_state="completed",
             # eval_dataset=pipeline.datamanager.eval_dataset,
         #)
+        # print(train_dataset[0]["image"])
+        # open("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/image_indices.txt", "w").write(str(image_indices))
         
         # draw the training cameras and images
-        self.camera_handles: Dict[int, viser.CameraFrustumHandle] = {}
-        self.original_c2w: Dict[int, np.ndarray] = {}
-        image_indices = self._pick_drawn_image_idxs(len(train_dataset))
-        for idx in image_indices:
-            image = train_dataset[idx]["image"]
-            camera = train_dataset.cameras[idx]
-            image_uint8 = (image * 255).detach().type(torch.uint8)
-            image_uint8 = image_uint8.permute(2, 0, 1)
+        # self.camera_handles: Dict[int, viser.CameraFrustumHandle] = {}
+        # self.original_c2w: Dict[int, np.ndarray] = {}
+        # image_indices = self._pick_drawn_image_idxs(len(train_dataset))
+        # for idx in image_indices: #for every image in the dataset
+        #     image = train_dataset[idx]["image"] # image matrix with normalized rgba pixel values
+        #     camera = train_dataset.cameras[idx]
+        #     image_uint8 = (image * 255).detach().type(torch.uint8)
+        #     image_uint8 = image_uint8.permute(2, 0, 1)
 
-            # torchvision can be slow to import, so we do it lazily.
-            import torchvision
+        #     # torchvision can be slow to import, so we do it lazily.
+        #     import torchvision
 
-            image_uint8 = torchvision.transforms.functional.resize(image_uint8, 100, antialias=None)  # type: ignore
-            image_uint8 = image_uint8.permute(1, 2, 0)
-            image_uint8 = image_uint8.cpu().numpy()
-            c2w = camera.camera_to_worlds.cpu().numpy()
-            R = vtf.SO3.from_matrix(c2w[:3, :3])
-            R = R @ vtf.SO3.from_x_radians(np.pi)
-            camera_handle = self.viser_server.add_camera_frustum(
-                name=f"/cameras/camera_{idx:05d}",
-                fov=float(2 * np.arctan(camera.cx / camera.fx[0])),
-                scale=self.config.camera_frustum_scale,
-                aspect=float(camera.cx[0] / camera.cy[0]),
-                image=image_uint8,
-                wxyz=R.wxyz,
-                position=c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO,
-            )
+        #     image_uint8 = torchvision.transforms.functional.resize(image_uint8, 100, antialias=None)  # type: ignore
+        #     image_uint8 = image_uint8.permute(1, 2, 0)
+        #     image_uint8 = image_uint8.cpu().numpy()
+        #     c2w = camera.camera_to_worlds.cpu().numpy()
+        #     R = vtf.SO3.from_matrix(c2w[:3, :3])
+        #     R = R @ vtf.SO3.from_x_radians(np.pi)
+        #     camera_handle = self.viser_server.add_camera_frustum(
+        #         name=f"/cameras/camera_{idx:05d}",
+        #         fov=float(2 * np.arctan(camera.cx / camera.fx[0])),
+        #         scale=self.config.camera_frustum_scale,
+        #         aspect=float(camera.cx[0] / camera.cy[0]),
+        #         image=image_uint8,
+        #         wxyz=R.wxyz,
+        #         position=c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO,
+        #     )
 
-            @camera_handle.on_click
-            def _(event: viser.SceneNodePointerEvent[viser.CameraFrustumHandle]) -> None:
-                with event.client.atomic():
-                    event.client.camera.position = event.target.position
-                    event.client.camera.wxyz = event.target.wxyz
+        #     @camera_handle.on_click
+        #     def _(event: viser.SceneNodePointerEvent[viser.CameraFrustumHandle]) -> None:
+        #         with event.client.atomic():
+        #             event.client.camera.position = event.target.position
+        #             event.client.camera.wxyz = event.target.wxyz
 
-            self.camera_handles[idx] = camera_handle
-            self.original_c2w[idx] = c2w
+        #     self.camera_handles[idx] = camera_handle
+        #     self.original_c2w[idx] = c2w
 
-        self.train_state = train_state
-        self.train_util = 0.9
+        # self.train_state = train_state
+        # self.train_util = 0.9
 
-    def update_scene(self, step: int, num_rays_per_batch: Optional[int] = None) -> None:
-        """updates the scene based on the graph weights
+    # def update_scene(self, step: int, num_rays_per_batch: Optional[int] = None) -> None:
+    #     """updates the scene based on the graph weights
 
-        Args:
-            step: iteration step of training
-            num_rays_per_batch: number of rays per batch, used during training
-        """
-        self.step = step
+    #     Args:
+    #         step: iteration step of training
+    #         num_rays_per_batch: number of rays per batch, used during training
+    #     """
+    #     self.step = step
 
-        if len(self.render_statemachines) == 0:
-            return
-        # this stops training while moving to make the response smoother
-        while time.time() - self.last_move_time < 0.1:
-            time.sleep(0.05)
-        if self.trainer is not None and self.trainer.training_state == "training" and self.train_util != 1:
-            if (
-                EventName.TRAIN_RAYS_PER_SEC.value in GLOBAL_BUFFER["events"]
-                and EventName.VIS_RAYS_PER_SEC.value in GLOBAL_BUFFER["events"]
-            ):
-                train_s = GLOBAL_BUFFER["events"][EventName.TRAIN_RAYS_PER_SEC.value]["avg"]
-                vis_s = GLOBAL_BUFFER["events"][EventName.VIS_RAYS_PER_SEC.value]["avg"]
-                train_util = self.train_util
-                vis_n = self.control_panel.max_res**2
-                train_n = num_rays_per_batch
-                train_time = train_n / train_s
-                vis_time = vis_n / vis_s
+    #     if len(self.render_statemachines) == 0:
+    #         return
+    #     # this stops training while moving to make the response smoother
+    #     while time.time() - self.last_move_time < 0.1:
+    #         time.sleep(0.05)
+    #     if self.trainer is not None and self.trainer.training_state == "training" and self.train_util != 1:
+    #         if (
+    #             EventName.TRAIN_RAYS_PER_SEC.value in GLOBAL_BUFFER["events"]
+    #             and EventName.VIS_RAYS_PER_SEC.value in GLOBAL_BUFFER["events"]
+    #         ):
+    #             train_s = GLOBAL_BUFFER["events"][EventName.TRAIN_RAYS_PER_SEC.value]["avg"]
+    #             vis_s = GLOBAL_BUFFER["events"][EventName.VIS_RAYS_PER_SEC.value]["avg"]
+    #             train_util = self.train_util
+    #             vis_n = self.control_panel.max_res**2
+    #             train_n = num_rays_per_batch
+    #             train_time = train_n / train_s
+    #             vis_time = vis_n / vis_s
 
-                render_freq = train_util * vis_time / (train_time - train_util * train_time)
-            else:
-                render_freq = 30
-            if step > self.last_step + render_freq:
-                self.last_step = step
-                clients = self.viser_server.get_clients()
-                for id in clients:
-                    camera_state = self.get_camera_state(clients[id])
-                    if camera_state is not None:
-                        self.render_statemachines[id].action(RenderAction("step", camera_state))
-                self.update_camera_poses()
-                self.update_step(step)
+    #             render_freq = train_util * vis_time / (train_time - train_util * train_time)
+    #         else:
+    #             render_freq = 30
+    #         if step > self.last_step + render_freq:
+    #             self.last_step = step
+    #             clients = self.viser_server.get_clients()
+    #             for id in clients:
+    #                 camera_state = self.get_camera_state(clients[id])
+    #                 if camera_state is not None:
+    #                     self.render_statemachines[id].action(RenderAction("step", camera_state))
+    #             self.update_camera_poses()
+    #             self.update_step(step)
 
     def update_colormap_options(self, dimensions: int, dtype: type) -> None:
         """update the colormap options based on the current render

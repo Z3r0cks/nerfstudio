@@ -225,6 +225,7 @@ class NerfactoField(Field):
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
+        # print("Berechnete Dichte:")
         return density, base_mlp_out
 
     def get_outputs(
@@ -249,11 +250,11 @@ class NerfactoField(Field):
             else:
                 if self.use_average_appearance_embedding:
                     embedded_appearance = torch.ones(
-                        (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
+                        (*directions.shape[:-1], self.appearance_embedding_dim), device="cuda:0"
                     ) * self.embedding_appearance.mean(dim=0)
                 else:
                     embedded_appearance = torch.zeros(
-                        (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
+                        (*directions.shape[:-1], self.appearance_embedding_dim), device="cuda:0"
                     )
 
         # transients

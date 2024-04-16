@@ -36,6 +36,7 @@ from nerfstudio.viewer_legacy.server import viewer_utils
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
+    from nerfstudio.viewer.viewer_density import ViewerDensity
 
 RenderStates = Literal["low_move", "low_static", "high"]
 RenderActions = Literal["rerender", "move", "static", "step"]
@@ -59,7 +60,7 @@ class RenderStateMachine(threading.Thread):
         viewer: the viewer state
     """
 
-    def __init__(self, viewer: Viewer, viser_scale_ratio: float, client: ClientHandle):
+    def __init__(self, viewer: Viewer | ViewerDensity, viser_scale_ratio: float, client: ClientHandle):
         threading.Thread.__init__(self)
         self.transitions: Dict[RenderStates, Dict[RenderActions, RenderStates]] = {
             s: {} for s in get_args(RenderStates)
@@ -134,7 +135,7 @@ class RenderStateMachine(threading.Thread):
         if not self.viewer.render_tab_state.preview_render and self.viewer.include_time:
             camera_state.time = self.viewer.control_panel.time
         camera = get_camera(camera_state, image_height, image_width)
-        camera = camera.to(self.viewer.get_model().device)
+        camera = camera.to(self.viewer.get_model().device) # cuda:0
         assert isinstance(camera, Cameras)
         assert camera is not None, "render called before viewer connected"
 
