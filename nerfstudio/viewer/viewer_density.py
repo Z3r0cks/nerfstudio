@@ -54,6 +54,7 @@ from nerfstudio.fields.nerfacto_field import NerfactoField
 from nerfstudio.fields.density_fields import HashMLPDensityField
 from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
 from mpl_toolkits.mplot3d import Axes3D
+from nerfstudio.utils.debugging import Debugging
 
 
 if TYPE_CHECKING:
@@ -116,6 +117,9 @@ class ViewerDensity:
         self.train_btn_state: Literal["training", "paused", "completed"] = "training"
         self._prev_train_state: Literal["training", "paused", "completed"] = "training"
         self.last_move_time = 0
+        
+        self.origin_frame_active = False
+        self.origin_frame = None
 
         self.viser_server = viser.ViserServer(host=config.websocket_host, port=websocket_port)
         # Set the name of the URL either to the share link if available, or the localhost
@@ -204,12 +208,23 @@ class ViewerDensity:
         self.get_density_button = self.viser_server.add_gui_button(
             label="Visualize 3D Scene", disabled=False, color="cyan", 
         )
-        self.get_density_button.on_click(lambda _: self.get_density("3D"))
+        self.get_density_button.on_click(lambda _: self.get_density("3d"))
         
         self.visualize_density_button = self.viser_server.add_gui_button(
             label="Histogram", disabled=False, color="yellow", 
         )
         self.visualize_density_button.on_click(lambda _: self.get_density("his"))
+        
+        self.visualize_density_viser_button = self.viser_server.add_gui_button(
+            label="Render in Viser", disabled=False, color="pink", 
+        )
+        self.visualize_density_viser_button.on_click(lambda _: self.get_density("viser"))
+        
+        self.viser_button = self.viser_server.add_gui_button(
+            label="Toggle Origin Frame", disabled=False, color="red", 
+        )
+        self.viser_button.on_click(lambda _: self.viser_example())
+        
         #------------------------------------------------------
         
         tabs = self.viser_server.add_gui_tab_group()
@@ -297,32 +312,83 @@ class ViewerDensity:
             )
         self.ready = True
 
-    #------------------------------------------------------
-    def write_to_file(self, data, path: str) -> None:
-        with open("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/prompt/" + path + ".txt", "w") as f:
-            f.write(str(data))
-            # print(f'{directions=}'.split('=')[0])
-            
-    def get_density(self, type: str) -> None:
+    #------------------------------------------------------ 
+    def viser_example(self) -> None:
+        
+        self.viser_server.world_axes.visible = True
+        self.viser_server.add_icosphere("/first", 0.2, (255, 0, 0), 3, (0,0,0,0), (0,0,0))
+        self.viser_server.add_icosphere("/second", 0.2, (255, 0, 0), 3, (0,0,0,0), (1,0,0))
+        self.viser_server.add_icosphere("/third", 0.2, (255, 0, 0), 3, (0,0,0,0), (2,0,0))
+        self.viser_server.add_icosphere("/fourth", 0.2, (255, 0, 0), 3, (0,0,0,0), (3,0,0))
+        self.viser_server.add_icosphere("/fifth", 0.2, (255, 0, 0), 3, (0,0,0,0), (4,0,0))
+
+        # server = viser.ViserServer()
+
+        # while True:
+        #     # Add some coordinate frames to the scene. These will be visualized in the viewer.
+        # Debugging.write_to_file(self.viser_server, "viser_server")
+        
+        # testframe = self.viser_server.add_frame(
+        #     "/tree/branch",
+        #     wxyz=(1.0, 0.0, 0.0, 0.0),
+        #     position=(0.0, 0.0, 0.0),
+        # )
+        # self.test_viser_frame = True
+        
+        # if self.origin_frame_active == False:
+        #     self.origin_frame = self.viser_server.add_frame(
+        #         "/tree/branch",
+        #         wxyz=(0.0, 0.0, 0.0, 0.0),
+        #         position=(self.viser_server.get_clients()[0].camera._state.position),
+        #     )
+        #     self.origin_frame_active = True
+        # else:
+        #     self.origin_frame.visible = False
+        #     self.origin_frame_active = False
+        # self.viser_server.world_axes.position = (3.0, 12.0, -5.0)
+        # self.viser_server.world_axes.visible = True
+        # self.viser_server.set_up_direction((0.0, 0.0, 0.0))
+        
+        # self.viser_server.get_clients()
+        # Debugging.write_to_file(self.viser_server.get_clients(), "viser_server.get_clients")
+        
+        # self.viser_server.get
+        # print(viser.SceneNodePointerEvent[source]
+        
+        
+    
+    def get_density(self, button_type: str) -> None:
         
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+        num_rays = 20
         # examble
-        origins = torch.zeros((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
-        directions = torch.rand((10, 3), device=device)  # 10 direction vectors (normalized)
+        origins = torch.zeros((num_rays, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
+        directions = torch.rand((num_rays, 3), device=device)  # 10 direction vectors (normalized)
         directions = directions / torch.norm(directions, dim=1, keepdim=True)  # direction vectors normalizing
-        pixel_area = torch.ones((10, 1), device=device)  # area of pixel with 1 m distance from origin
-
-        # self.write_to_file(origins, "origins")
-        # self.write_to_file(directions, "directions")
-        # self.write_to_file(pixel_area, "pixel_area")
+        pixel_area = torch.ones((num_rays, 1), device=device)  # area of pixel with 1 m distance from origin
         
         # optional attriutes
-        camera_indices = torch.randint(low=0, high=5, size=(10, 1), device=device)
-        nears = torch.zeros((10, 1), device=device)  # begin from sampling alont the rays
-        fars = torch.ones((10, 1), device=device) * 10  # end
-        times = torch.linspace(0, 1, 10, device=device).view(-1, 1)  # time for sampling
+        camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
+        nears = torch.zeros((num_rays, 1), device=device)  # begin from sampling alont the rays
+        fars = torch.ones((num_rays, 1), device=device) * 2  # end
         
+        # num_rays = origins.size(0)
+        num_samples = int(fars.max().item() / 0.1) # samplerate  nt(fars.max().item() / 0.1) = 1500 (0.1 meter)
+        
+        # generate times that for every ray identical times are used
+        
+        # # examble
+        # origins = torch.zeros((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
+        # directions = torch.rand((10, 3), device=device)  # 10 direction vectors (normalized)
+        # directions = directions / torch.norm(directions, dim=1, keepdim=True)  # direction vectors normalizing
+        # pixel_area = torch.ones((10, 1), device=device)  # area of pixel with 1 m distance from origin
+        
+        # # optional attriutes
+        # camera_indices = torch.randint(low=0, high=5, size=(10, 1), device=device)
+        # nears = torch.zeros((10, 1), device=device)  # begin from sampling alont the rays
+        # fars = torch.ones((10, 1), device=device) * 150  # end
+        times = torch.linspace(0, num_samples, 10, device=device).view(-1, 1)  # time for sampling
+
         # create ray bundle
         ray_bundle = RayBundle(
             origins=origins,
@@ -331,16 +397,82 @@ class ViewerDensity:
             camera_indices=camera_indices,
             nears=nears,
             fars=fars,
-            times=times
+            # times=times
         )
+
+        # # create ray bundle
+        # ray_bundle = RayBundle(
+        #     origins=origins,
+        #     directions=directions,
+        #     pixel_area=pixel_area,
+        #     camera_indices=camera_indices,
+        #     nears=nears.repeat(1, num_samples).view(10, num_samples, 1),
+        #     fars=fars.repeat(1, num_samples).view(10, num_samples, 1),
+        #     times=torch.linspace(0, 1, 10, device=device).view(-1, 1)
+        # )
+        
         model = self.pipeline.model.to(device)
         outputs = model.get_outputs(ray_bundle)
-        density: torch.Tensor = outputs["density"]
+        density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
         # print(density.shape): torch.Size([10, 48, 1])
-        if type == "his":
+        Debugging.write_to_file(density, "density_six_rays")
+        if button_type == "his":
             self.visualize_density_histogram(density)
-        else:
+        elif button_type == "3d":
             self.visualize_density_3d(origins, directions, density)
+        else:
+            self.visualize_density_viser(ray_bundle, density)
+            
+    def visualize_density_viser(self, ray_bundle: RayBundle, density: torch.Tensor) -> None:
+        
+        print("Visualizing density in Viser...")
+        device = density.device
+        density = density.squeeze()  # remove singular dimension
+        max_density = density.max()
+        density_normalized = density / max_density
+        # end_value = ray_bundle.fars[0].item()
+        
+        # ray_length = torch.linspace(0, end_value, density.shape[1], device=device)  # generate line space along the ray
+        
+        # find the first point where density exceeds the threshold
+        density_threshold = 0.3
+        threshold_mask = density_normalized > density_threshold
+        first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
+        
+        # ensure you consider cases where no points exceed by checking the condition
+        valid_mask = threshold_mask.any(dim=1)
+        first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
+        
+        # filter all points after the threshold exceedance
+        valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
+        
+        # calculate the ray points only up to the first exceedance
+        for i in range(ray_bundle.origins.shape[0]):  # iterate over all rays
+            if ray_bundle.nears is not None and ray_bundle.fars is not None:
+                near = ray_bundle.nears[i].item()
+                far = ray_bundle.fars[i].item()
+                ray_length = torch.linspace(near, far, density.shape[1], device=device)
+            
+            for j in range(density.shape[1]):  # iterate over points in each ray
+                if valid_points_mask[i, j]:
+                    point = ray_bundle.origins[i] + ray_bundle.directions[i] * ray_length[j]
+                    normalized_density = density_normalized[i, j].item()
+                    
+                    # Define the color based on density, converting it to RGB
+                    color_intensity = int(255 * normalized_density)
+                    color = (color_intensity, 0, 0)  # Red color intensity based on density
+                    
+                    # Add sphere at this point
+                    sphere_name = f"/ray_{i}_point_{j}"
+                    self.viser_server.add_icosphere(
+                        name=sphere_name,
+                        radius=0.1  ,  # smaller radius for visualization
+                        color=color,
+                        subdivisions=2,
+                        wxyz=(1.0, 0.0, 0.0, 0.0),  # default orientation
+                        position=point.cpu().detach().numpy(),
+                        visible=True
+                    )
     
     def visualize_density_histogram(self, density: torch.Tensor) -> None:
         # Density histogram along the rays
@@ -355,7 +487,6 @@ class ViewerDensity:
         fig.show()
         
     def visualize_density_3d(self, origins, direction, density: torch.Tensor) -> None:
-        
         density_threshold = 0.3
         device = density.device
         density = density.squeeze() #remove singlar dimension
@@ -410,96 +541,6 @@ class ViewerDensity:
         fig = go.Figure(data=[trace], layout=layout)
         fig.show()
     
-        
-        # ----------------------------------------------------------------------------------------------------
-        
-        # Entfernen Sie die zusätzliche Dimension
-        # density = density.squeeze(-1)
-
-        # # Überprüfen Sie, ob density jetzt eine 2D-Tensor der Form (num_rays, num_samples) ist
-        # assert len(density.shape) == 2
-        # num_rays = density.shape[0]
-        
-        # fig = go.Figure()
-
-        # # Zeichnen Sie für jeden Strahl eine Linie
-        # for i in range(num_rays):
-        #     plt.plot(density[i].cpu().detach().numpy(), label=f"Strahl {i}")
-
-        # plt.legend()
-        # plt.xlabel("Sample entlang des Strahls")
-        # plt.ylabel("Dichte")
-        # plt.draw()  # Aktualisieren Sie den Plot
-        # plt.savefig("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/density.png")
-        # print("finished")
-        # plt.pause(0.001)  # Kurze Pause, um das GUI-Event-Loop zu erlauben, Updates zu verarbeiten
-        # # Angenommen, density ist ein 2D-Tensor der Form (num_rays, num_samples)
-        # assert len(density.shape) == 2
-        # num_rays = density.shape[0]
-
-        # # Für jeden Strahl eine Linie zeichnen
-        # for i in range(num_rays):
-        #     plt.plot(density[i], label=f"Ray {i}")
-
-        # plt.legend()
-        # plt.xlabel("Sample entlang des Strahls")
-        # plt.ylabel("Dichte")
-        # plt.show()
-
-        
-        # density = torch.rand(10, 10)  # Beispiel-Daten
-
-        # plt.imshow(density.numpy(), cmap='hot', interpolation='nearest')
-        # plt.colorbar()  # Zeigt die Farbskala an
-        # plt.show()(
-        
-        # x, y, z = np.random.rand(3, 100) * 100
-        # density = np.random.rand(100)
-        
-        # trace = go.Scatter3d(
-        #     x=x, y=y, z=z,
-        #     mode='markers',
-        #     marker = dict(
-        #         size=12,
-        #         color=density,
-        #         colorscale='Viridis',
-        #         opacity =.8
-        #     )
-        # )
-        
-        # fig = go.Figure(data=[trace])
-        # fig.show()
-    
-        
-        # aabb = torch.tensor([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]])
-        # num_images = self._pick_drawn_image_idxs(len(train_dataset))
-        
-        # field = NerfactoField(aabb, num_images, )
-        
-        
-        # model.
-        # origins = torch.tensor([[0.0, 0.0, 0.0]]) # origin of the ray in 3d
-        # direction = torch.tensor([[1.0, 0.0, 0.0]]) # direction of the ray in 3d
-        
-        # nun_sample = 1 # number of samples to take along the ray
-        # starts = torch.zeros(nun_sample, 1)	# start of the ray
-        # ends = torch.linspace(0.0, 1.0, nun_sample).view(-1, 1) # end of the ray
-        
-        # # create frustrum
-        # frustrum = Frustums(
-        #     origins=origins,
-        #     directions=direction,
-        #     starts=starts,
-        #     ends=ends,
-        #     pixel_area=torch.ones_like(starts),
-        # )
-        
-        # #create ray samples
-        # ray_samples = RaySamples(
-        #     frustums=frustrum
-        # )
-        # field = Field()
-        # density, _ = field.get_density(ray_samples)
     #------------------------------------------------------
     
     # def toggle_pause_button(self) -> None:

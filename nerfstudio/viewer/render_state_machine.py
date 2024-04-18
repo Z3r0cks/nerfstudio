@@ -33,6 +33,9 @@ from nerfstudio.utils import colormaps, writer
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.utils import CameraState, get_camera
 from nerfstudio.viewer_legacy.server import viewer_utils
+#-------------------------------------------------------------
+from nerfstudio.utils.debugging import Debugging
+#-------------------------------------------------------------
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
@@ -123,6 +126,7 @@ class RenderStateMachine(threading.Thread):
             camera_state: the current camera state
         """
         # initialize the camera ray bundle
+        
         if self.viewer.control_panel.crop_viewport:
             obb = self.viewer.control_panel.crop_obb
         else:

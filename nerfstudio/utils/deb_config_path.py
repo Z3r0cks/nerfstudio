@@ -1,0 +1,1 @@
+DEBUG_PATH = "D:/Masterthesis/debugging"
