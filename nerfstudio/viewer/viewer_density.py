@@ -205,25 +205,64 @@ class ViewerDensity:
         self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
         
         #------------------------------------------------------
-        self.get_density_button = self.viser_server.add_gui_button(
-            label="Visualize 3D Scene", disabled=False, color="cyan", 
-        )
-        self.get_density_button.on_click(lambda _: self.get_density("3d"))
+        # Input fields for the density field
+        # Test gui inputs
         
-        self.visualize_density_button = self.viser_server.add_gui_button(
-            label="Histogram", disabled=False, color="yellow", 
-        )
-        self.visualize_density_button.on_click(lambda _: self.get_density("his"))
+        # self.viser_server.add_gui_modal("modal")
+        # self.viser_server.add_3d_gui_container("container")
+        # self.viser_server.add_gui_checkbox("checkbox", False)
+        # self.viser_server.add_gui_folder("folder")
+        # self.viser_server.add_gui_dropdown("dropdown",["option1", "option2", "option3"], "option1")
+        # self.viser_server.add_gui_markdown("markdown", None)
+        # self.viser_server.add_gui_multi_slider("mutli-slider", 0, 10, 1, (1, 5))
+        # self.viser_server.add_gui_number("number", 0, 10, 1, 5)
+        # self.rgbaButton = self.viser_server.add_gui_rgb("rgb", (255, 0, 0))
+        # self.viser_server.add_gui_rgba("rgba", (255, 0, 0, 1))
+        # self.viser_server.add_gui_vector2("vector2", (1, 1))
+        # self.viser_server.add_gui_tab_group(10)
+        # self.viser_server.add_gui_tab_group(2)
+        # self.viser_server.add_gui_vector3("vector3", (2, 2, 4))
+        # self.viser_server.add_gui_button("Get RGB").on_click(lambda _: print(self.rgbaButton.value))
+        self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
+        # self.box = self.viser_server.add_box("box", (43, 42, 65), (0.5, 0.2, 0.2), (0, 0, 0, 0), (1.5, 0.4, -3.86))
+        # self.box_pos_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 1.5)
+        # self.box_pos_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0.4)
+        # self.box_pos_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, -3.86)
+        # self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
         
-        self.visualize_density_viser_button = self.viser_server.add_gui_button(
-            label="Render in Viser", disabled=False, color="pink", 
-        )
-        self.visualize_density_viser_button.on_click(lambda _: self.get_density("viser"))
+        # self.box_wxyz_w = self.viser_server.add_gui_slider("W", -10, 10, 0.1, 0)
+        # self.box_wxyz_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 0)
+        # self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0)
+        # self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, 0)
+        # self.viser_server.add_gui_button("Change Box wxyz").on_click(lambda _: setattr(self.box, 'wxyz', (self.box_wxyz_w.value,self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value)))
+        # self.viser_server.add_gui_button("Get box rot and wxyz").on_click(lambda _: print(self.box.position, self.box.wxyz))
         
-        self.viser_button = self.viser_server.add_gui_button(
-            label="Toggle Origin Frame", disabled=False, color="red", 
-        )
-        self.viser_button.on_click(lambda _: self.viser_example())
+        
+        # self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (2.0, 2.0, 2.0)))
+
+        
+        # position
+        # self.position_field = self.viser_server.add_gui_
+        
+        # self.get_density_button = self.viser_server.add_gui_button(
+        #     label="Visualize 3D Scene", disabled=False, color="cyan", 
+        # )
+        # self.get_density_button.on_click(lambda _: self.get_density("3d"))
+        
+        # self.visualize_density_button = self.viser_server.add_gui_button(
+        #     label="Histogram", disabled=False, color="yellow", 
+        # )
+        # self.visualize_density_button.on_click(lambda _: self.get_density("his"))
+        
+        # self.visualize_density_viser_button = self.viser_server.add_gui_button(
+        #     label="Render in Viser", disabled=False, color="pink", 
+        # )
+        # self.visualize_density_viser_button.on_click(lambda _: self.get_density("viser"))
+        
+        # self.viser_button = self.viser_server.add_gui_button(
+        #     label="Toggle Origin Frame", disabled=False, color="red", 
+        # )
+        # self.viser_button.on_click(lambda _: self.viser_example())
         
         #------------------------------------------------------
         
@@ -313,6 +352,46 @@ class ViewerDensity:
         self.ready = True
 
     #------------------------------------------------------ 
+    def add_gui(self) -> None:
+        import math
+        #https://quaternions.online/
+        self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
+        # self.box = self.viser_server.add_box("box", (43, 42, 65), (1, 1, 0), (0, 0, 0, 0), (0, 0, 0))
+        #[ 0.987  0.     0.    -0.161]
+        self.box = self.viser_server.add_box("box", (43, 42, 65), (.4, .2, .2), (math.cos(math.pi / 4), 0, 0, 0), (1.5, 0.4, -3.86))
+        self.box_pos_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 1.5)
+        self.box_pos_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0.4)
+        self.box_pos_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, -3.86)
+        self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+        
+        self.box_wxyz_w = self.viser_server.add_gui_slider("W", -1, 1, 0.1, 0)
+        self.box_wxyz_x = self.viser_server.add_gui_slider("X", -1, 1, 0.1, 0)
+        self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -1, 1, 0.1, 0)
+        self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -1, 1, 0.1, 0)
+        self.viser_server.add_gui_button("Change Box wxyz").on_click(lambda _: setattr(self.box, 'wxyz', (self.box_wxyz_w.value,self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value)))
+        self.viser_server.add_gui_button("Get box rot and wxyz").on_click(lambda _: print(self.box.position, self.box.wxyz))
+        
+        self.viser_server.add_frame(
+            "/tree",
+            wxyz=(1.0, 0.0, 0.0, 0.0),
+            position=(1.5, 0.4, -3.86),
+        )
+        self.viser_server.add_frame(
+            "/tree/branch",
+            wxyz=(1.0, 0.0, 0.0, 0.0),
+            position=(1.5, 0.4, -3.86),
+        )
+        leaf =  self.viser_server.add_frame(
+            "/tree/branch/leaf",
+            wxyz=(1.0, 0.0, 0.0, 0.0),
+            position=(1.5, 0.4, -3.86),
+        )
+        time.sleep(5.0)
+
+        # Remove the leaf node from the scene.
+        leaf.remove()
+        time.sleep(0.5)
+        
     def viser_example(self) -> None:
         
         self.viser_server.world_axes.visible = True
@@ -369,13 +448,14 @@ class ViewerDensity:
         
         # optional attriutes
         camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
-        nears = torch.zeros((num_rays, 1), device=device)  # begin from sampling alont the rays
-        fars = torch.ones((num_rays, 1), device=device) * 2  # end
+        nears = torch.full((num_rays, 1), 0.05, device=device) # begin from sampling alont the rays
+        fars = torch.full((num_rays, 1), 1000.0, device=device) * 2  # end
         
-        # num_rays = origins.size(0)
+
         num_samples = int(fars.max().item() / 0.1) # samplerate  nt(fars.max().item() / 0.1) = 1500 (0.1 meter)
         
-        # generate times that for every ray identical times are used
+        # ge
+        # nerate times that for every ray identical times are used
         
         # # examble
         # origins = torch.zeros((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
@@ -400,16 +480,6 @@ class ViewerDensity:
             # times=times
         )
 
-        # # create ray bundle
-        # ray_bundle = RayBundle(
-        #     origins=origins,
-        #     directions=directions,
-        #     pixel_area=pixel_area,
-        #     camera_indices=camera_indices,
-        #     nears=nears.repeat(1, num_samples).view(10, num_samples, 1),
-        #     fars=fars.repeat(1, num_samples).view(10, num_samples, 1),
-        #     times=torch.linspace(0, 1, 10, device=device).view(-1, 1)
-        # )
         
         model = self.pipeline.model.to(device)
         outputs = model.get_outputs(ray_bundle)
