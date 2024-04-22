@@ -55,7 +55,7 @@ from nerfstudio.fields.density_fields import HashMLPDensityField
 from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
 from mpl_toolkits.mplot3d import Axes3D
 from nerfstudio.utils.debugging import Debugging
-
+from scipy.spatial.transform import Rotation as R
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
@@ -353,145 +353,77 @@ class ViewerDensity:
 
     #------------------------------------------------------ 
     def add_gui(self) -> None:
-        import math
         #https://quaternions.online/
-        self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
-        # self.box = self.viser_server.add_box("box", (43, 42, 65), (1, 1, 0), (0, 0, 0, 0), (0, 0, 0))
-        #[ 0.987  0.     0.    -0.161]
-        self.box = self.viser_server.add_box("box", (43, 42, 65), (.4, .2, .2), (math.cos(math.pi / 4), 0, 0, 0), (1.5, 0.4, -3.86))
-        self.box_pos_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 1.5)
-        self.box_pos_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0.4)
-        self.box_pos_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, -3.86)
-        self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+        self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (0, 0, 0, 0), (1.50, 0.5, -3.65))
+        self.box_pos_x = self.viser_server.add_gui_slider("Pos X", -4, 4, 0.05, 1.50)
+        self.box_pos_y = self.viser_server.add_gui_slider("Pos Y", -4, 4, 0.05, 0.5)
+        self.box_pos_z = self.viser_server.add_gui_slider("Pos Z", -4, 4, 0.05, -3.65)
         
-        self.box_wxyz_w = self.viser_server.add_gui_slider("W", -1, 1, 0.1, 0)
-        self.box_wxyz_x = self.viser_server.add_gui_slider("X", -1, 1, 0.1, 0)
-        self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -1, 1, 0.1, 0)
-        self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -1, 1, 0.1, 0)
-        self.viser_server.add_gui_button("Change Box wxyz").on_click(lambda _: setattr(self.box, 'wxyz', (self.box_wxyz_w.value,self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value)))
-        self.viser_server.add_gui_button("Get box rot and wxyz").on_click(lambda _: print(self.box.position, self.box.wxyz))
-        
-        self.viser_server.add_frame(
-            "/tree",
-            wxyz=(1.0, 0.0, 0.0, 0.0),
-            position=(1.5, 0.4, -3.86),
-        )
-        self.viser_server.add_frame(
-            "/tree/branch",
-            wxyz=(1.0, 0.0, 0.0, 0.0),
-            position=(1.5, 0.4, -3.86),
-        )
-        leaf =  self.viser_server.add_frame(
-            "/tree/branch/leaf",
-            wxyz=(1.0, 0.0, 0.0, 0.0),
-            position=(1.5, 0.4, -3.86),
-        )
-        time.sleep(5.0)
+        self.box_pos_x.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+        self.box_pos_y.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+        self.box_pos_z.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
 
-        # Remove the leaf node from the scene.
-        leaf.remove()
-        time.sleep(0.5)
+        self.box_wxyz_x = self.viser_server.add_gui_slider("X", -180, 180, 0.1, 0)
+        self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -180, 180, 0.1, 0)
+        self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -180, 180, 0.1, 0)
         
-    def viser_example(self) -> None:
+        self.box_wxyz_x.on_update(lambda _: self.from_eul_to_quad())
+        self.box_wxyz_y.on_update(lambda _: self.from_eul_to_quad())
+        self.box_wxyz_z.on_update(lambda _: self.from_eul_to_quad())
         
-        self.viser_server.world_axes.visible = True
-        self.viser_server.add_icosphere("/first", 0.2, (255, 0, 0), 3, (0,0,0,0), (0,0,0))
-        self.viser_server.add_icosphere("/second", 0.2, (255, 0, 0), 3, (0,0,0,0), (1,0,0))
-        self.viser_server.add_icosphere("/third", 0.2, (255, 0, 0), 3, (0,0,0,0), (2,0,0))
-        self.viser_server.add_icosphere("/fourth", 0.2, (255, 0, 0), 3, (0,0,0,0), (3,0,0))
-        self.viser_server.add_icosphere("/fifth", 0.2, (255, 0, 0), 3, (0,0,0,0), (4,0,0))
-
-        # server = viser.ViserServer()
-
-        # while True:
-        #     # Add some coordinate frames to the scene. These will be visualized in the viewer.
-        # Debugging.write_to_file(self.viser_server, "viser_server")
-        
-        # testframe = self.viser_server.add_frame(
+        self.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
+        # self.viser_server.add_frame(
+        #     "/tree",
+        #     wxyz=(1.0, 0.0, 0.0, 0.0),
+        #     position=(1.5, 0.4, -3.86),
+        # )
+        # self.viser_server.add_frame(
         #     "/tree/branch",
         #     wxyz=(1.0, 0.0, 0.0, 0.0),
-        #     position=(0.0, 0.0, 0.0),
+        #     position=(1.5, 0.4, -3.86),
         # )
-        # self.test_viser_frame = True
-        
-        # if self.origin_frame_active == False:
-        #     self.origin_frame = self.viser_server.add_frame(
-        #         "/tree/branch",
-        #         wxyz=(0.0, 0.0, 0.0, 0.0),
-        #         position=(self.viser_server.get_clients()[0].camera._state.position),
-        #     )
-        #     self.origin_frame_active = True
-        # else:
-        #     self.origin_frame.visible = False
-        #     self.origin_frame_active = False
-        # self.viser_server.world_axes.position = (3.0, 12.0, -5.0)
-        # self.viser_server.world_axes.visible = True
-        # self.viser_server.set_up_direction((0.0, 0.0, 0.0))
-        
-        # self.viser_server.get_clients()
-        # Debugging.write_to_file(self.viser_server.get_clients(), "viser_server.get_clients")
-        
-        # self.viser_server.get
-        # print(viser.SceneNodePointerEvent[source]
-        
-        
+        # leaf =  self.viser_server.add_frame(
+        #     "/tree/branch/leaf",
+        #     wxyz=(1.0, 0.0, 0.0, 0.0),
+        #     position=(1.5, 0.4, -3.86),
+        # )
+        # time.sleep(5.0)
+
+        # Remove the leaf node from the scene.
+        # leaf.remove()
+        time.sleep(0.5)    
     
-    def get_density(self, button_type: str) -> None:
+    def get_density(self, origin) -> None:
         
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        num_rays = 20
-        # examble
-        origins = torch.zeros((num_rays, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
-        directions = torch.rand((num_rays, 3), device=device)  # 10 direction vectors (normalized)
-        directions = directions / torch.norm(directions, dim=1, keepdim=True)  # direction vectors normalizing
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   
+        num_rays = 4
+        origin_tensor = torch.tensor(origin, device=device).unsqueeze(0).repeat(num_rays, 1)
+        local_directions = torch.rand((num_rays, 3), device=device)  # 10 direction vectors (normalized)
+        local_directions = local_directions / torch.norm(local_directions, dim=1, keepdim=True)  # direction vectors normalizing
+        # directions = rotate_vectors_by_quaternion(local_directions, quaternion)
         pixel_area = torch.ones((num_rays, 1), device=device)  # area of pixel with 1 m distance from origin
         
         # optional attriutes
         camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
         nears = torch.full((num_rays, 1), 0.05, device=device) # begin from sampling alont the rays
-        fars = torch.full((num_rays, 1), 1000.0, device=device) * 2  # end
-        
+        fars = torch.full((num_rays, 1), 3.0, device=device) * 2  # end
 
-        num_samples = int(fars.max().item() / 0.1) # samplerate  nt(fars.max().item() / 0.1) = 1500 (0.1 meter)
-        
-        # ge
-        # nerate times that for every ray identical times are used
-        
-        # # examble
-        # origins = torch.zeros((10, 3), device=device)  # 10 rays, 3 dimensions (X, Y, Z)
-        # directions = torch.rand((10, 3), device=device)  # 10 direction vectors (normalized)
-        # directions = directions / torch.norm(directions, dim=1, keepdim=True)  # direction vectors normalizing
-        # pixel_area = torch.ones((10, 1), device=device)  # area of pixel with 1 m distance from origin
-        
-        # # optional attriutes
-        # camera_indices = torch.randint(low=0, high=5, size=(10, 1), device=device)
-        # nears = torch.zeros((10, 1), device=device)  # begin from sampling alont the rays
-        # fars = torch.ones((10, 1), device=device) * 150  # end
-        times = torch.linspace(0, num_samples, 10, device=device).view(-1, 1)  # time for sampling
 
         # create ray bundle
         ray_bundle = RayBundle(
-            origins=origins,
-            directions=directions,
+            origins=origin_tensor,
+            directions=local_directions,
             pixel_area=pixel_area,
             camera_indices=camera_indices,
             nears=nears,
             fars=fars,
-            # times=times
         )
 
-        
         model = self.pipeline.model.to(device)
         outputs = model.get_outputs(ray_bundle)
         density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
-        # print(density.shape): torch.Size([10, 48, 1])
-        Debugging.write_to_file(density, "density_six_rays")
-        if button_type == "his":
-            self.visualize_density_histogram(density)
-        elif button_type == "3d":
-            self.visualize_density_3d(origins, directions, density)
-        else:
-            self.visualize_density_viser(ray_bundle, density)
+        self.visualize_density_viser(ray_bundle, density)
+
             
     def visualize_density_viser(self, ray_bundle: RayBundle, density: torch.Tensor) -> None:
         
@@ -529,20 +461,23 @@ class ViewerDensity:
                     normalized_density = density_normalized[i, j].item()
                     
                     # Define the color based on density, converting it to RGB
-                    color_intensity = int(255 * normalized_density)
+                    color_intensity = int(155 * normalized_density)
                     color = (color_intensity, 0, 0)  # Red color intensity based on density
                     
                     # Add sphere at this point
                     sphere_name = f"/ray_{i}_point_{j}"
                     self.viser_server.add_icosphere(
                         name=sphere_name,
-                        radius=0.1  ,  # smaller radius for visualization
+                        radius=0.01  ,  # smaller radius for visualization
                         color=color,
                         subdivisions=2,
-                        wxyz=(1.0, 0.0, 0.0, 0.0),  # default orientation
+                        wxyz= (0.66714492, 0.26077986, 0.64990381, -0.25404049), 
                         position=point.cpu().detach().numpy(),
                         visible=True
                     )
+    
+    def from_eul_to_quad(self):
+        self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
     
     def visualize_density_histogram(self, density: torch.Tensor) -> None:
         # Density histogram along the rays

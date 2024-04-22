@@ -39,6 +39,8 @@ from nerfstudio.field_components.mlp import MLP, MLPWithHashEncoding
 from nerfstudio.field_components.spatial_distortions import SpatialDistortion
 from nerfstudio.fields.base_field import Field, get_normalized_directions
 
+#------------------------------------------------
+from nerfstudio.utils.debugging import Debugging
 
 class NerfactoField(Field):
     """Compound Field
@@ -213,9 +215,11 @@ class NerfactoField(Field):
         selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
         positions = positions * selector[..., None]
         self._sample_locations = positions
+        Debugging.write_to_file(self._sample_locations.shape, "positions")
         if not self._sample_locations.requires_grad:
             self._sample_locations.requires_grad = True
         positions_flat = positions.view(-1, 3)
+        Debugging.write_to_file(positions_flat.shape, "positions_flat")
         h = self.mlp_base(positions_flat).view(*ray_samples.frustums.shape, -1)
         density_before_activation, base_mlp_out = torch.split(h, [1, self.geo_feat_dim], dim=-1)
         self._density_before_activation = density_before_activation
