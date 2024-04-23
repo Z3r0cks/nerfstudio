@@ -205,6 +205,9 @@ class NerfactoField(Field):
 
     def get_density(self, ray_samples: RaySamples) -> Tuple[Tensor, Tensor]:
         """Computes and returns the densities."""
+        
+        # render on camera position?
+        
         if self.spatial_distortion is not None:
             positions = ray_samples.frustums.get_positions()
             positions = self.spatial_distortion(positions)
@@ -215,11 +218,9 @@ class NerfactoField(Field):
         selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
         positions = positions * selector[..., None]
         self._sample_locations = positions
-        Debugging.write_to_file(self._sample_locations.shape, "positions")
         if not self._sample_locations.requires_grad:
             self._sample_locations.requires_grad = True
         positions_flat = positions.view(-1, 3)
-        Debugging.write_to_file(positions_flat.shape, "positions_flat")
         h = self.mlp_base(positions_flat).view(*ray_samples.frustums.shape, -1)
         density_before_activation, base_mlp_out = torch.split(h, [1, self.geo_feat_dim], dim=-1)
         self._density_before_activation = density_before_activation
@@ -229,8 +230,12 @@ class NerfactoField(Field):
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
+        print(self._sample_locations.shape)
         return density, base_mlp_out
-
+    # --------------------------------------------------------------------------------------------   
+    def get_sample_loaction(self):
+        return self._sample_locations
+    # --------------------------------------------------------------------------------------------
     def get_outputs(
         self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None
     ) -> Dict[FieldHeadNames, Tensor]:

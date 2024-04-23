@@ -76,6 +76,10 @@ class Field(nn.Module):
         Args:
             ray_samples: Samples locations to compute density.
         """
+        
+    def get_sample_locations(self):
+        """ Get locations from samples."""
+        return self._sample_locations
 
     def get_normals(self) -> Float[Tensor, "*batch 3"]:
         """Computes and returns a tensor of normals.

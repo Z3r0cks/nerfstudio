@@ -222,7 +222,6 @@ class ViewerDensity:
         # self.viser_server.add_gui_tab_group(10)
         # self.viser_server.add_gui_tab_group(2)
         # self.viser_server.add_gui_vector3("vector3", (2, 2, 4))
-        # self.viser_server.add_gui_button("Get RGB").on_click(lambda _: print(self.rgbaButton.value))
         self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
         # self.box = self.viser_server.add_box("box", (43, 42, 65), (0.5, 0.2, 0.2), (0, 0, 0, 0), (1.5, 0.4, -3.86))
         # self.box_pos_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 1.5)
@@ -235,8 +234,6 @@ class ViewerDensity:
         # self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0)
         # self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, 0)
         # self.viser_server.add_gui_button("Change Box wxyz").on_click(lambda _: setattr(self.box, 'wxyz', (self.box_wxyz_w.value,self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value)))
-        # self.viser_server.add_gui_button("Get box rot and wxyz").on_click(lambda _: print(self.box.position, self.box.wxyz))
-        
         
         # self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (2.0, 2.0, 2.0)))
 
@@ -353,11 +350,10 @@ class ViewerDensity:
 
     #------------------------------------------------------ 
     def add_gui(self) -> None:
-        #https://quaternions.online/
-        self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (0, 0, 0, 0), (1.50, 0.5, -3.65))
-        self.box_pos_x = self.viser_server.add_gui_slider("Pos X", -4, 4, 0.05, 1.50)
-        self.box_pos_y = self.viser_server.add_gui_slider("Pos Y", -4, 4, 0.05, 0.5)
-        self.box_pos_z = self.viser_server.add_gui_slider("Pos Z", -4, 4, 0.05, -3.65)
+        self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
+        self.box_pos_x = self.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 1.50)
+        self.box_pos_y = self.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0.5)
+        self.box_pos_z = self.viser_server.add_gui_slider("Pos Z", -4, 4, 0.01, -3.65)
         
         self.box_pos_x.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
         self.box_pos_y.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
@@ -394,47 +390,81 @@ class ViewerDensity:
         time.sleep(0.5)    
     
     def get_density(self, origin) -> None:
-        
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   
-        num_rays = 4
-        origin_tensor = torch.tensor(origin, device=device).unsqueeze(0).repeat(num_rays, 1)
-        local_directions = torch.rand((num_rays, 3), device=device)  # 10 direction vectors (normalized)
-        local_directions = local_directions / torch.norm(local_directions, dim=1, keepdim=True)  # direction vectors normalizing
-        # directions = rotate_vectors_by_quaternion(local_directions, quaternion)
+        num_rays = 15
+        rotation = R.from_quat(self.box.wxyz)
+        
+        base_direction = torch.tensor([0, 0, 1], device=device).unsqueeze(0).repeat(num_rays, 1)
+        rotated_directions_np = rotation.apply(base_direction.cpu().numpy())
+        rotated_directions = torch.tensor(rotated_directions_np, device=device).float()
+        directions = rotated_directions / torch.norm(rotated_directions, dim=1, keepdim=True)
+        origin_tensor = torch.tensor(origin, device=device).unsqueeze(0).repeat(num_rays, 1).float()
         pixel_area = torch.ones((num_rays, 1), device=device)  # area of pixel with 1 m distance from origin
         
         # optional attriutes
         camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
         nears = torch.full((num_rays, 1), 0.05, device=device) # begin from sampling alont the rays
-        fars = torch.full((num_rays, 1), 3.0, device=device) * 2  # end
+        fars = torch.full((num_rays, 1), 1000.0, device=device) * 2  # end
 
-
-        # create ray bundle
-        ray_bundle = RayBundle(
-            origins=origin_tensor,
-            directions=local_directions,
-            pixel_area=pixel_area,
-            camera_indices=camera_indices,
-            nears=nears,
-            fars=fars,
-        )
+        # create frustum
+        
+        frustum = Frustums(directions=directions, origins=origin_tensor, starts=nears, ends=fars, pixel_area=pixel_area)
+        
+        ray_samples = RaySamples(frustum)
+        
+        # # create ray bundle
+        # ray_bundle = RayBundle(
+        #     origins=origin_tensor,
+        #     directions=directions,
+        #     pixel_area=pixel_area,
+        #     camera_indices=camera_indices,
+        #     nears=nears,
+        #     fars=fars,
+        # )
 
         model = self.pipeline.model.to(device)
-        outputs = model.get_outputs(ray_bundle)
-        density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
-        self.visualize_density_viser(ray_bundle, density)
+        # outputs = model.get_outputs(ray_bundle)
+        
+        
+        
+        # print(model.get_proposal_networks())
+        # density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
+        # density_locations  = model.get_sample_locations()
+        field = model.get_field()
+        density, base_mlp_out = field.get_density(ray_samples)
+        print(density)
+        # print(density.shape)
+        # sample_locations = field.get_sample_loaction()
+        # self.test_visualize_density(sample_locations)
+        # self.visualize_density_viser(ray_bundle, density)
 
+    def test_visualize_density(self, sample_locations) -> None:
+        print("test visualize density")
+        sample_locations = sample_locations.cpu()
+        for ray_idx, ray in enumerate(sample_locations):
+            for sample_idx, sample in enumerate(ray):
+                sphere_name = f"ray_{ray_idx}_sample_{sample_idx}"
+                
+                # detach the tensor from the computation graph
+                sample_detached = sample.detach() # Detach the tensor
+                sample_tuple = tuple(sample_detached.numpy()) # Convert to NumPy array then to tuple
+                # print(sample_tuple)
+                self.viser_server.add_icosphere(
+                    name=sphere_name,
+                    subdivisions=2,
+                    wxyz= (0, 0, 0, 0),
+                    radius=0.005,
+                    color=(155, 0, 0),
+                    position=sample_tuple,  # Konvertiere NumPy Array zu Tuple
+                    visible=True
+                )
+        
             
     def visualize_density_viser(self, ray_bundle: RayBundle, density: torch.Tensor) -> None:
-        
-        print("Visualizing density in Viser...")
         device = density.device
         density = density.squeeze()  # remove singular dimension
         max_density = density.max()
         density_normalized = density / max_density
-        # end_value = ray_bundle.fars[0].item()
-        
-        # ray_length = torch.linspace(0, end_value, density.shape[1], device=device)  # generate line space along the ray
         
         # find the first point where density exceeds the threshold
         density_threshold = 0.3
@@ -463,15 +493,14 @@ class ViewerDensity:
                     # Define the color based on density, converting it to RGB
                     color_intensity = int(155 * normalized_density)
                     color = (color_intensity, 0, 0)  # Red color intensity based on density
-                    
                     # Add sphere at this point
                     sphere_name = f"/ray_{i}_point_{j}"
                     self.viser_server.add_icosphere(
                         name=sphere_name,
-                        radius=0.01  ,  # smaller radius for visualization
+                        radius=0.01  ,  # smaller radius for visualiza  tion
                         color=color,
                         subdivisions=2,
-                        wxyz= (0.66714492, 0.26077986, 0.64990381, -0.25404049), 
+                        wxyz= (0, 0, 0, 0), 
                         position=point.cpu().detach().numpy(),
                         visible=True
                     )

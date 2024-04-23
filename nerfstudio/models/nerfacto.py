@@ -211,7 +211,7 @@ class NerfactoModel(Model):
                 1,
                 self.config.proposal_update_every,
             )
-
+        
         # Change proposal network initial sampler if uniform
         initial_sampler = None  # None is for piecewise as default (see ProposalNetworkSampler)
         if self.config.proposal_initial_sampler == "uniform":
@@ -251,7 +251,14 @@ class NerfactoModel(Model):
         self.ssim = structural_similarity_index_measure
         self.lpips = LearnedPerceptualImagePatchSimilarity(normalize=True)
         self.step = 0
-
+    #------------------------------------------------------------------------------------------
+    def get_proposal_networks(self):
+        return self.proposal_networks
+    
+    def get_field(self):
+        return self.field
+    #------------------------------------------------------------------------------------------
+    
     def get_param_groups(self) -> Dict[str, List[Parameter]]:
         param_groups = {}
         param_groups["proposal_networks"] = list(self.proposal_networks.parameters())
@@ -321,7 +328,7 @@ class NerfactoModel(Model):
             "depth": depth,
             "expected_depth": expected_depth,
             "weights": weights,
-            "density": field_outputs[FieldHeadNames.DENSITY]
+            "density": field_outputs[FieldHeadNames.DENSITY],
         }
 
         if self.config.predict_normals:

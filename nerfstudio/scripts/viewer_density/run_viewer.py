@@ -124,8 +124,8 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         raise ValueError(f"Unknown vis type: {config.vis}")
 
     # We don't need logging, but writer.GLOBAL_BUFFER needs to be populated
-    config.logging.local_writer.enable = False
-    writer.setup_local_writer(config.logging, max_iter=config.max_num_iterations, banner_messages=banner_messages)
+    # config.logging.local_writer.enable = False
+    # writer.setup_local_writer(config.logging, max_iter=config.max_num_iterations, banner_messages=banner_messages)
 
     # assert viewer_state and pipeline.datamanager.train_dataset
     # viewer_state.init_scene(
