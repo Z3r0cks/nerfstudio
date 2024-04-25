@@ -432,14 +432,13 @@ class ViewerDensity:
         # density_locations  = model.get_sample_locations()
         field = model.get_field()
         density, base_mlp_out = field.get_density(ray_samples)
-        print(density)
+        # print(density)
         # print(density.shape)
-        # sample_locations = field.get_sample_loaction()
-        # self.test_visualize_density(sample_locations)
+        sample_locations = field.get_sample_loaction()
+        self.test_visualize_density(sample_locations)
         # self.visualize_density_viser(ray_bundle, density)
 
     def test_visualize_density(self, sample_locations) -> None:
-        print("test visualize density")
         sample_locations = sample_locations.cpu()
         for ray_idx, ray in enumerate(sample_locations):
             for sample_idx, sample in enumerate(ray):
@@ -462,48 +461,48 @@ class ViewerDensity:
             
     def visualize_density_viser(self, ray_bundle: RayBundle, density: torch.Tensor) -> None:
         device = density.device
-        density = density.squeeze()  # remove singular dimension
-        max_density = density.max()
-        density_normalized = density / max_density
+        # density = density.squeeze()  # remove singular dimension
+        # max_density = density.max()
+        # density_normalized = density / max_density
         
-        # find the first point where density exceeds the threshold
-        density_threshold = 0.3
-        threshold_mask = density_normalized > density_threshold
-        first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
+        # # find the first point where density exceeds the threshold
+        # density_threshold = 0.3
+        # threshold_mask = density_normalized > density_threshold
+        # first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
         
-        # ensure you consider cases where no points exceed by checking the condition
-        valid_mask = threshold_mask.any(dim=1)
-        first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
+        # # ensure you consider cases where no points exceed by checking the condition
+        # valid_mask = threshold_mask.any(dim=1)
+        # first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
         
-        # filter all points after the threshold exceedance
-        valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
+        # # filter all points after the threshold exceedance
+        # valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
         
         # calculate the ray points only up to the first exceedance
-        for i in range(ray_bundle.origins.shape[0]):  # iterate over all rays
-            if ray_bundle.nears is not None and ray_bundle.fars is not None:
-                near = ray_bundle.nears[i].item()
-                far = ray_bundle.fars[i].item()
-                ray_length = torch.linspace(near, far, density.shape[1], device=device)
+        # for i in range(ray_bundle.origins.shape[0]):  # iterate over all rays
+        #     if ray_bundle.nears is not None and ray_bundle.fars is not None:
+        #         near = ray_bundle.nears[i].item()
+        #         far = ray_bundle.fars[i].item()
+        #         ray_length = torch.linspace(near, far, density.shape[1], device=device)
             
-            for j in range(density.shape[1]):  # iterate over points in each ray
-                if valid_points_mask[i, j]:
-                    point = ray_bundle.origins[i] + ray_bundle.directions[i] * ray_length[j]
-                    normalized_density = density_normalized[i, j].item()
+        #     for j in range(density.shape[1]):  # iterate over points in each ray
+        #         if valid_points_mask[i, j]:
+        #             point = ray_bundle.origins[i] + ray_bundle.directions[i] * ray_length[j]
+        #             normalized_density = density_normalized[i, j].item()
                     
-                    # Define the color based on density, converting it to RGB
-                    color_intensity = int(155 * normalized_density)
-                    color = (color_intensity, 0, 0)  # Red color intensity based on density
-                    # Add sphere at this point
-                    sphere_name = f"/ray_{i}_point_{j}"
-                    self.viser_server.add_icosphere(
-                        name=sphere_name,
-                        radius=0.01  ,  # smaller radius for visualiza  tion
-                        color=color,
-                        subdivisions=2,
-                        wxyz= (0, 0, 0, 0), 
-                        position=point.cpu().detach().numpy(),
-                        visible=True
-                    )
+        #             # Define the color based on density, converting it to RGB
+        #             color_intensity = int(155 * normalized_density)
+        #             color = (color_intensity, 0, 0)  # Red color intensity based on density
+        #             # Add sphere at this point
+        #             sphere_name = f"/ray_{i}_point_{j}"
+        #             self.viser_server.add_icosphere(
+        #                 name=sphere_name,
+        #                 radius=0.01  ,  # smaller radius for visualiza  tion
+        #                 color=color,
+        #                 subdivisions=2,
+        #                 wxyz= (0, 0, 0, 0), 
+        #                 position=point.cpu().detach().numpy(),
+        #                 visible=True
+        #             )
     
     def from_eul_to_quad(self):
         self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()

@@ -128,76 +128,80 @@ class RenderStateMachine(threading.Thread):
         # initialize the camera ray bundle
         
         if self.viewer.control_panel.crop_viewport:
-            obb = self.viewer.control_panel.crop_obb
+            obb = self.viewer.control_panel.crop_obb # oriented bounding box
         else:
             obb = None
 
         image_height, image_width = self._calculate_image_res(camera_state.aspect)
-
         # These 2 lines make the control panel's time option independent from the render panel's.
         # When outside of render preview, it will use the control panel's time.
         if not self.viewer.render_tab_state.preview_render and self.viewer.include_time:
             camera_state.time = self.viewer.control_panel.time
-        camera = get_camera(camera_state, image_height, image_width)
+        camera = get_camera(camera_state, image_height, image_width)        
         camera = camera.to(self.viewer.get_model().device) # cuda:0
         assert isinstance(camera, Cameras)
         assert camera is not None, "render called before viewer connected"
 
         with TimeWriter(None, None, write=False) as vis_t:
             with self.viewer.train_lock if self.viewer.train_lock is not None else contextlib.nullcontext():
-                if isinstance(self.viewer.get_model(), SplatfactoModel):
-                    color = self.viewer.control_panel.background_color
-                    background_color = torch.tensor(
-                        [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
-                        device=self.viewer.get_model().device,
-                    )
-                    self.viewer.get_model().set_background(background_color)
+                # if isinstance(self.viewer.get_model(), SplatfactoModel):
+                #     color = self.viewer.control_panel.background_color
+                #     background_color = torch.tensor(
+                #         [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
+                #         device=self.viewer.get_model().device,
+                #     )
+                #     self.viewer.get_model().set_background(background_color)
                 self.viewer.get_model().eval()
                 step = self.viewer.step
                 try:
-                    if self.viewer.control_panel.crop_viewport:
-                        color = self.viewer.control_panel.background_color
-                        if color is None:
-                            background_color = torch.tensor([0.0, 0.0, 0.0], device=self.viewer.pipeline.model.device)
-                        else:
-                            background_color = torch.tensor(
-                                [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
-                                device=self.viewer.get_model().device,
-                            )
-                        with background_color_override_context(
-                            background_color
-                        ), torch.no_grad(), viewer_utils.SetTrace(self.check_interrupt):
-                            outputs = self.viewer.get_model().get_outputs_for_camera(camera, obb_box=obb)
-                    else:
-                        with torch.no_grad(), viewer_utils.SetTrace(self.check_interrupt):
-                            outputs = self.viewer.get_model().get_outputs_for_camera(camera, obb_box=obb)
+                    # if self.viewer.control_panel.crop_viewport:
+                    #     color = self.viewer.control_panel.background_color
+                    #     if color is None:
+                    #         background_color = torch.tensor([0.0, 0.0, 0.0], device=self.viewer.pipeline.model.device)
+                    #     else:
+                    #         background_color = torch.tensor(
+                    #             [color[0] / 255.0, color[1] / 255.0, color[2] / 255.0],
+                    #             device=self.viewer.get_model().device,
+                    #         )
+                    #     with background_color_override_context(
+                    #         background_color
+                    #     ), torch.no_grad(), viewer_utils.SetTrace(self.check_interrupt):
+                    #         outputs = self.viewer.get_model().get_outputs_for_camera(camera, obb_box=obb)
+                    # else:
+                    with torch.no_grad(), viewer_utils.SetTrace(self.check_interrupt):
+                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, obb_box=obb)
                 except viewer_utils.IOChangeException:
                     self.viewer.get_model().train()
                     raise
                 self.viewer.get_model().train()
             num_rays = (camera.height * camera.width).item()
             if self.viewer.control_panel.layer_depth:
-                if isinstance(self.viewer.get_model(), SplatfactoModel):
-                    # Gaussians render much faster than we can send depth images, so we do some downsampling.
-                    assert len(outputs["depth"].shape) == 3
-                    assert outputs["depth"].shape[-1] == 1
+                # if isinstance(self.viewer.get_model(), SplatfactoModel):
+                #     # Gaussians render much faster than we can send depth images, so we do some downsampling.
+                #     assert len(outputs["depth"].shape) == 3
+                #     assert outputs["depth"].shape[-1] == 1
 
-                    desired_depth_pixels = {"low_move": 128, "low_static": 128, "high": 512}[self.state] ** 2
-                    current_depth_pixels = outputs["depth"].shape[0] * outputs["depth"].shape[1]
-                    scale = min(desired_depth_pixels / current_depth_pixels, 1.0)
+                #     desired_depth_pixels = {"low_move": 128, "low_static": 128, "high": 512}[self.state] ** 2
+                #     current_depth_pixels = outputs["depth"].shape[0] * outputs["depth"].shape[1]
+                #     scale = min(desired_depth_pixels / current_depth_pixels, 1.0)
 
-                    outputs["gl_z_buf_depth"] = F.interpolate(
-                        outputs["depth"].squeeze(dim=-1)[None, None, ...],
-                        size=(int(outputs["depth"].shape[0] * scale), int(outputs["depth"].shape[1] * scale)),
-                        mode="bilinear",
-                    )[0, 0, :, :, None]
-                else:
-                    # Convert to z_depth if depth compositing is enabled.
-                    R = camera.camera_to_worlds[0, 0:3, 0:3].T
-                    camera_ray_bundle = camera.generate_rays(camera_indices=0, obb_box=obb)
-                    pts = camera_ray_bundle.directions * outputs["depth"]
-                    pts = (R @ (pts.view(-1, 3).T)).T.view(*camera_ray_bundle.directions.shape)
-                    outputs["gl_z_buf_depth"] = -pts[..., 2:3]  # negative z axis is the coordinate convention
+                #     outputs["gl_z_buf_depth"] = F.interpolate(
+                #         outputs["depth"].squeeze(dim=-1)[None, None, ...],
+                #         size=(int(outputs["depth"].shape[0] * scale), int(outputs["depth"].shape[1] * scale)),
+                #         mode="bilinear",
+                #     )[0, 0, :, :, None]
+                # else:
+                # Convert to z_depth if depth compositing is enabled.
+                print("camera: ", camera)
+                print("camera.camera_to_worlds: ", camera.camera_to_worlds)
+                R = camera.camera_to_worlds[0, 0:3, 0:3].T
+                print("R: ", R)
+                camera_ray_bundle = camera.generate_rays(camera_indices=0, obb_box=obb)
+                print("camera_ray_bundle: ", camera_ray_bundle)
+                pts = camera_ray_bundle.directions * outputs["depth"]
+                pts = (R @ (pts.view(-1, 3).T)).T.view(*camera_ray_bundle.directions.shape)
+                print("pts: ", pts)
+                outputs["gl_z_buf_depth"] = -pts[..., 2:3]  # negative z axis is the coordinate convention
         render_time = vis_t.duration
         if writer.is_initialized() and render_time != 0:
             writer.put_time(
@@ -225,6 +229,7 @@ class RenderStateMachine(threading.Thread):
             self.state = self.transitions[self.state][action.action]
             try:
                 outputs = self._render_img(action.camera_state)
+                
             except viewer_utils.IOChangeException:
                 # if we got interrupted, don't send the output to the viewer
                 continue

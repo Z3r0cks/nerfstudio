@@ -41,6 +41,8 @@ from nerfstudio.fields.base_field import Field, get_normalized_directions
 
 #------------------------------------------------
 from nerfstudio.utils.debugging import Debugging
+import inspect
+
 
 class NerfactoField(Field):
     """Compound Field
@@ -207,15 +209,20 @@ class NerfactoField(Field):
         """Computes and returns the densities."""
         
         # render on camera position?
+        # print("ray_samples:", ray_samples)
+        # print("Frustrum:", ray_samples.frustums)
         
         if self.spatial_distortion is not None:
+            # print("if")
             positions = ray_samples.frustums.get_positions()
             positions = self.spatial_distortion(positions)
             positions = (positions + 2.0) / 4.0
         else:
+            # print("else")
             positions = SceneBox.get_normalized_positions(ray_samples.frustums.get_positions(), self.aabb)
         # Make sure the tcnn gets inputs between 0 and 1.
         selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
+        # print("selector: ",selector)
         positions = positions * selector[..., None]
         self._sample_locations = positions
         if not self._sample_locations.requires_grad:
@@ -230,7 +237,9 @@ class NerfactoField(Field):
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
-        print(self._sample_locations.shape)
+        # print("Shape: ",self._sample_locations.shape)
+        # print("")
+        # print("-----------------------------END----------------------------------")
         return density, base_mlp_out
     # --------------------------------------------------------------------------------------------   
     def get_sample_loaction(self):
