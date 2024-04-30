@@ -31,8 +31,7 @@ from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils import writer
 from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.viewer.viewer_density import ViewerDensity as ViewerState
-from nerfstudio.viewer_legacy.server.viewer_state import ViewerLegacyState
-
+from nerfstudio.utils.debugging import Debugging
 
 @dataclass
 class ViewerConfigWithoutNumRays(ViewerConfig):
@@ -99,6 +98,7 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
         pipeline: Pipeline instance of which to load weights
         step: Step at which the pipeline was saved
     """
+    
     base_dir = config.get_base_dir()
     viewer_log_path = base_dir / config.viewer.relative_log_filename
     banner_messages = None

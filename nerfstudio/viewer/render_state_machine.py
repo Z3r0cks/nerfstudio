@@ -35,6 +35,7 @@ from nerfstudio.viewer.utils import CameraState, get_camera
 from nerfstudio.viewer_legacy.server import viewer_utils
 #-------------------------------------------------------------
 from nerfstudio.utils.debugging import Debugging
+from scipy.spatial import cKDTree
 #-------------------------------------------------------------
 
 if TYPE_CHECKING:
@@ -90,7 +91,17 @@ class RenderStateMachine(threading.Thread):
         self.viser_scale_ratio = viser_scale_ratio
         self.client = client
         self.running = True
+        self.viewer.viser_server.add_gui_button("void it", color="pink").on_click(lambda _: self.void_id())
+        self.viewer.viser_server.add_gui_button("Td", color="pink").on_click(lambda _: self._show_density())
+        
+        #-------------------------------------------------------------
+        self.densities = []
+        self.density_locations = []
 
+    def void_id(self):
+        self.densities = []
+        self.density_locations = []
+        
     def action(self, action: RenderAction):
         """Takes an action and updates the state machine
 
@@ -192,15 +203,15 @@ class RenderStateMachine(threading.Thread):
                 #     )[0, 0, :, :, None]
                 # else:
                 # Convert to z_depth if depth compositing is enabled.
-                print("camera: ", camera)
-                print("camera.camera_to_worlds: ", camera.camera_to_worlds)
+                # print("camera: ", camera)
+                # print("camera.camera_to_worlds: ", camera.camera_to_worlds)
                 R = camera.camera_to_worlds[0, 0:3, 0:3].T
-                print("R: ", R)
+                # print("R: ", R)
                 camera_ray_bundle = camera.generate_rays(camera_indices=0, obb_box=obb)
-                print("camera_ray_bundle: ", camera_ray_bundle)
+                # print("camera_ray_bundle: ", camera_ray_bundle)
                 pts = camera_ray_bundle.directions * outputs["depth"]
                 pts = (R @ (pts.view(-1, 3).T)).T.view(*camera_ray_bundle.directions.shape)
-                print("pts: ", pts)
+                # print("pts: ", pts)
                 outputs["gl_z_buf_depth"] = -pts[..., 2:3]  # negative z axis is the coordinate convention
         render_time = vis_t.duration
         if writer.is_initialized() and render_time != 0:
@@ -211,6 +222,7 @@ class RenderStateMachine(threading.Thread):
 
     def run(self):
         """Main loop for the render thread"""
+        
         while self.running:
             if not self.viewer.ready:
                 time.sleep(0.1)
@@ -233,8 +245,123 @@ class RenderStateMachine(threading.Thread):
             except viewer_utils.IOChangeException:
                 # if we got interrupted, don't send the output to the viewer
                 continue
-            self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
+            
+            self.densities.append(outputs["density"])
+            self.density_locations.append(outputs["density_locations"])
+            
+            print(len(self.densities))
+            print(len(self.density_locations))
 
+            self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
+            # self.viewer.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self._show_density())
+            # self._show_density(outputs["density"], outputs["density_locations"])
+
+    def filter_nearby_points(self, points, distance_threshold=0.008):
+        tree = cKDTree(points)
+        kept_indices = np.ones(len(points), dtype=bool)  # Markiert, welche Punkte behalten werden
+
+        for i in range(len(points)):
+            if kept_indices[i]:  # Wenn dieser Punkt noch nicht verworfen wurde
+                # Finde alle anderen Punkte in der Nähe dieses Punktes, verwende Euklidische Distanz (p=2)
+                nearby_indices = tree.query_ball_point(points[i], r=distance_threshold, p=2)
+                # Setze alle anderen Punkte in der Nähe auf "nicht behalten", außer den aktuellen Punkt
+                kept_indices[nearby_indices] = False
+                kept_indices[i] = True  # Stelle sicher, dass dieser Punkt behalten wird
+
+        # Erzeuge den Array der gefilterten Punkte
+        filtered_points = points[kept_indices]
+        return filtered_points
+    
+    def _show_density(self):
+        """Show the density in the viewer
+
+        Args:
+            density_location: the density location
+        """
+        
+        import random
+        import string
+        import plotly.graph_objects as go
+        
+        threshold = 0.6
+        # print(self.densities[0].shape)
+        for i in range(len(self.densities)):
+            density = self.densities[i]
+            density_location = self.density_locations[i]
+
+            density = density.squeeze().cpu()
+            density_location = density_location.cpu()
+            mask = density > threshold
+            density_location = density_location[mask]
+            density_location = density_location.detach().numpy()
+            # density = density[mask]
+            # density = density.detach().numpy()
+            print("in", density_location.shape)
+            filtered_density_location = self.filter_nearby_points(density_location)
+            print("out",filtered_density_location.shape)
+            letters = string.ascii_letters 
+            random_string = ''.join(random.choice(letters) for _ in range(3))
+            
+            for i in range(0, len(filtered_density_location), 10):
+                position = (density_location[i][0].item(), density_location[i][1].item(), density_location[i][2].item())
+                self.viewer.viser_server.add_icosphere(
+                    name=f"{random_string}_point_{i}",
+                    subdivisions=1,
+                    wxyz=(0, 0, 0, 0),
+                    radius=0.008,
+                    color=(200, 0, 200),
+                    position=position, 
+                    visible=True
+            )
+            
+            # normalized_density = (density - density.min()) / (density.max() - density.min())
+            
+        #     trace = go.Scatter3d(
+        #         x=density_location[:, 0],  # X Koordinaten aller Punkte
+        #         y=density_location[:, 1],  # Y Koordinaten aller Punkte
+        #         z=density_location[:, 2],  # Z Koordinaten aller Punkte
+        #         mode='markers',
+        #         marker=dict(
+        #             size=2,
+        #             color=normalized_density,  # Verwendung der normalisierten Dichte als Farbwert
+        #             colorscale='Viridis',
+        #             opacity=0.8,
+        #             colorbar=dict(title='Normalized Density')
+        #         )
+        #     )
+                
+        #     # Erstellen des Layouts für den Plot
+        #     layout = go.Layout(
+        #         title="3D Density Visualization",
+        #         scene=dict(
+        #             xaxis=dict(title='X'),
+        #             yaxis=dict(title='Y'),
+        #             zaxis=dict(title='Z')
+        #         )
+        #     )
+
+        # # Kombinieren von Trace und Layout in einer Figur und Anzeigen des Plots
+        # fig = go.Figure(data=[trace], layout=layout)
+        # fig.show()
+
+        # for ray_idx, ray in enumerate(density_location):
+        #     for sample_idx, sample in enumerate(ray):
+        #         sphere_name = f"ray_{ray_idx}_sample_{sample_idx}"
+                
+        #         print("sample ", sample)
+        #         # detach the tensor from the computation graph
+        #         sample_detached = sample.detach() # Detach the tensor
+        #         # sample_tuple = tuple(sample_detached.numpy()) # Convert to NumPy array then to tuple
+        #         # self.viewer.viser_server.add_icosphere(
+        #         #     name=sphere_name,
+        #         #     subdivisions=2,
+        #         #     wxyz= (0, 0, 0, 0),
+        #         #     radius=0.005,
+        #         #     color=(155, 0, 0),
+        #         #     position=sample_tuple,  # Konvertiere NumPy Array zu Tuple
+        #         #     visible=True
+                # )
+                 
     def check_interrupt(self, frame, event, arg):
         """Raises interrupt when flag has been set and not already on lowest resolution.
         Used in conjunction with SetTrace.

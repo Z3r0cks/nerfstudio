@@ -56,6 +56,7 @@ from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
 from mpl_toolkits.mplot3d import Axes3D
 from nerfstudio.utils.debugging import Debugging
 from scipy.spatial.transform import Rotation as R
+from nerfstudio.viewer.render_state_machine import RenderAction
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
@@ -203,63 +204,10 @@ class ViewerDensity:
         # self.show_images.visible = False
         mkdown = self.make_stats_markdown(0, "0x0px")
         self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
-        
+        self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
         #------------------------------------------------------
-        # Input fields for the density field
-        # Test gui inputs
-        
-        # self.viser_server.add_gui_modal("modal")
-        # self.viser_server.add_3d_gui_container("container")
-        # self.viser_server.add_gui_checkbox("checkbox", False)
-        # self.viser_server.add_gui_folder("folder")
-        # self.viser_server.add_gui_dropdown("dropdown",["option1", "option2", "option3"], "option1")
-        # self.viser_server.add_gui_markdown("markdown", None)
-        # self.viser_server.add_gui_multi_slider("mutli-slider", 0, 10, 1, (1, 5))
-        # self.viser_server.add_gui_number("number", 0, 10, 1, 5)
-        # self.rgbaButton = self.viser_server.add_gui_rgb("rgb", (255, 0, 0))
-        # self.viser_server.add_gui_rgba("rgba", (255, 0, 0, 1))
-        # self.viser_server.add_gui_vector2("vector2", (1, 1))
-        # self.viser_server.add_gui_tab_group(10)
-        # self.viser_server.add_gui_tab_group(2)
-        # self.viser_server.add_gui_vector3("vector3", (2, 2, 4))
-        self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
-        # self.box = self.viser_server.add_box("box", (43, 42, 65), (0.5, 0.2, 0.2), (0, 0, 0, 0), (1.5, 0.4, -3.86))
-        # self.box_pos_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 1.5)
-        # self.box_pos_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0.4)
-        # self.box_pos_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, -3.86)
-        # self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
-        
-        # self.box_wxyz_w = self.viser_server.add_gui_slider("W", -10, 10, 0.1, 0)
-        # self.box_wxyz_x = self.viser_server.add_gui_slider("X", -10, 10, 0.1, 0)
-        # self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -10, 10, 0.1, 0)
-        # self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -10, 10, 0.1, 0)
-        # self.viser_server.add_gui_button("Change Box wxyz").on_click(lambda _: setattr(self.box, 'wxyz', (self.box_wxyz_w.value,self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value)))
-        
-        # self.viser_server.add_gui_button("Change Box Position").on_click(lambda _: setattr(self.box, 'position', (2.0, 2.0, 2.0)))
 
-        
-        # position
-        # self.position_field = self.viser_server.add_gui_
-        
-        # self.get_density_button = self.viser_server.add_gui_button(
-        #     label="Visualize 3D Scene", disabled=False, color="cyan", 
-        # )
-        # self.get_density_button.on_click(lambda _: self.get_density("3d"))
-        
-        # self.visualize_density_button = self.viser_server.add_gui_button(
-        #     label="Histogram", disabled=False, color="yellow", 
-        # )
-        # self.visualize_density_button.on_click(lambda _: self.get_density("his"))
-        
-        # self.visualize_density_viser_button = self.viser_server.add_gui_button(
-        #     label="Render in Viser", disabled=False, color="pink", 
-        # )
-        # self.visualize_density_viser_button.on_click(lambda _: self.get_density("viser"))
-        
-        # self.viser_button = self.viser_server.add_gui_button(
-        #     label="Toggle Origin Frame", disabled=False, color="red", 
-        # )
-        # self.viser_button.on_click(lambda _: self.viser_example())
+        self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
         
         #------------------------------------------------------
         
@@ -368,49 +316,43 @@ class ViewerDensity:
         self.box_wxyz_z.on_update(lambda _: self.from_eul_to_quad())
         
         self.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
-        # self.viser_server.add_frame(
-        #     "/tree",
-        #     wxyz=(1.0, 0.0, 0.0, 0.0),
-        #     position=(1.5, 0.4, -3.86),
-        # )
-        # self.viser_server.add_frame(
-        #     "/tree/branch",
-        #     wxyz=(1.0, 0.0, 0.0, 0.0),
-        #     position=(1.5, 0.4, -3.86),
-        # )
-        # leaf =  self.viser_server.add_frame(
-        #     "/tree/branch/leaf",
-        #     wxyz=(1.0, 0.0, 0.0, 0.0),
-        #     position=(1.5, 0.4, -3.86),
-        # )
-        # time.sleep(5.0)
 
-        # Remove the leaf node from the scene.
-        # leaf.remove()
-        time.sleep(0.5)    
+        self.viser_server.add_frame(
+            "/tree",
+            wxyz=(1.0, 0.0, 0.0, 0.0),
+            position=(0, 0, 0),
+        )   
     
     def get_density(self, origin) -> None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')   
-        num_rays = 15
-        rotation = R.from_quat(self.box.wxyz)
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        print("test")
+        clients = self.viser_server.get_clients()
+        # clients.keys()
+        for id in clients:
+            camera_state = self.get_camera_state(clients[id])
+            # Debugging.log("camera_state", camera_state)
+            self.render_statemachines[id].action(RenderAction("move", camera_state))
+        # self.render_statemachines.
+        # num_rays = 15
+        # rotation = R.from_quat(self.box.wxyz)
         
-        base_direction = torch.tensor([0, 0, 1], device=device).unsqueeze(0).repeat(num_rays, 1)
-        rotated_directions_np = rotation.apply(base_direction.cpu().numpy())
-        rotated_directions = torch.tensor(rotated_directions_np, device=device).float()
-        directions = rotated_directions / torch.norm(rotated_directions, dim=1, keepdim=True)
-        origin_tensor = torch.tensor(origin, device=device).unsqueeze(0).repeat(num_rays, 1).float()
-        pixel_area = torch.ones((num_rays, 1), device=device)  # area of pixel with 1 m distance from origin
+        # base_direction = torch.tensor([0, 0, 1], device=device).unsqueeze(0).repeat(num_rays, 1)
+        # rotated_directions_np = rotation.apply(base_direction.cpu().numpy())
+        # rotated_directions = torch.tensor(rotated_directions_np, device=device).float()
+        # directions = rotated_directions / torch.norm(rotated_directions, dim=1, keepdim=True)
+        # origin_tensor = torch.tensor(origin, device=device).unsqueeze(0).repeat(num_rays, 1).float()
+        # pixel_area = torch.ones((num_rays, 1), device=device)  # area of pixel with 1 m distance from origin
         
-        # optional attriutes
-        camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
-        nears = torch.full((num_rays, 1), 0.05, device=device) # begin from sampling alont the rays
-        fars = torch.full((num_rays, 1), 1000.0, device=device) * 2  # end
+        # # optional attriutes
+        # camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
+        # nears = torch.full((num_rays, 1), 0.05, device=device) # begin from sampling alont the rays
+        # fars = torch.full((num_rays, 1), 1000.0, device=device) * 2  # end
 
-        # create frustum
+        # # create frustum
         
-        frustum = Frustums(directions=directions, origins=origin_tensor, starts=nears, ends=fars, pixel_area=pixel_area)
+        # frustum = Frustums(directions=directions, origins=origin_tensor, starts=nears, ends=fars, pixel_area=pixel_area)
         
-        ray_samples = RaySamples(frustum)
+        # ray_samples = RaySamples(frustum)
         
         # # create ray bundle
         # ray_bundle = RayBundle(
@@ -422,7 +364,8 @@ class ViewerDensity:
         #     fars=fars,
         # )
 
-        model = self.pipeline.model.to(device)
+        # model = self.pipeline.model.to(device)
+        # model.get_outputs(origin)
         # outputs = model.get_outputs(ray_bundle)
         
         
@@ -430,12 +373,12 @@ class ViewerDensity:
         # print(model.get_proposal_networks())
         # density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
         # density_locations  = model.get_sample_locations()
-        field = model.get_field()
-        density, base_mlp_out = field.get_density(ray_samples)
+        # field = model.get_field()
+        # density, base_mlp_out = field.get_density(ray_samples)
         # print(density)
         # print(density.shape)
-        sample_locations = field.get_sample_loaction()
-        self.test_visualize_density(sample_locations)
+        # sample_locations = field.get_sample_loaction()
+        # self.test_visualize_density(sample_locations)
         # self.visualize_density_viser(ray_bundle, density)
 
     def test_visualize_density(self, sample_locations) -> None:
@@ -461,75 +404,12 @@ class ViewerDensity:
             
     def visualize_density_viser(self, ray_bundle: RayBundle, density: torch.Tensor) -> None:
         device = density.device
-        # density = density.squeeze()  # remove singular dimension
-        # max_density = density.max()
-        # density_normalized = density / max_density
-        
-        # # find the first point where density exceeds the threshold
-        # density_threshold = 0.3
-        # threshold_mask = density_normalized > density_threshold
-        # first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
-        
-        # # ensure you consider cases where no points exceed by checking the condition
-        # valid_mask = threshold_mask.any(dim=1)
-        # first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
-        
-        # # filter all points after the threshold exceedance
-        # valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
-        
-        # calculate the ray points only up to the first exceedance
-        # for i in range(ray_bundle.origins.shape[0]):  # iterate over all rays
-        #     if ray_bundle.nears is not None and ray_bundle.fars is not None:
-        #         near = ray_bundle.nears[i].item()
-        #         far = ray_bundle.fars[i].item()
-        #         ray_length = torch.linspace(near, far, density.shape[1], device=device)
-            
-        #     for j in range(density.shape[1]):  # iterate over points in each ray
-        #         if valid_points_mask[i, j]:
-        #             point = ray_bundle.origins[i] + ray_bundle.directions[i] * ray_length[j]
-        #             normalized_density = density_normalized[i, j].item()
-                    
-        #             # Define the color based on density, converting it to RGB
-        #             color_intensity = int(155 * normalized_density)
-        #             color = (color_intensity, 0, 0)  # Red color intensity based on density
-        #             # Add sphere at this point
-        #             sphere_name = f"/ray_{i}_point_{j}"
-        #             self.viser_server.add_icosphere(
-        #                 name=sphere_name,
-        #                 radius=0.01  ,  # smaller radius for visualiza  tion
-        #                 color=color,
-        #                 subdivisions=2,
-        #                 wxyz= (0, 0, 0, 0), 
-        #                 position=point.cpu().detach().numpy(),
-        #                 visible=True
-        #             )
-    
-    def from_eul_to_quad(self):
-        self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
-    
-    def visualize_density_histogram(self, density: torch.Tensor) -> None:
-        # Density histogram along the rays
-        density = density.cpu().detach().numpy().squeeze()
-        fig = go.Figure()
-        for i, single_ray_density in enumerate(density):
-            fig.add_trace(go.Scatter(y=single_ray_density, mode='lines', name=f'Ray {i}'))        
-        fig.update_layout(title='Density along rays', 
-                          xaxis_title='Sample along ray', 
-                          yaxis_title='Density',
-                          legend_title='Ray Index')
-        fig.show()
-        
-    def visualize_density_3d(self, origins, direction, density: torch.Tensor) -> None:
-        density_threshold = 0.3
-        device = density.device
-        density = density.squeeze() #remove singlar dimension
+        density = density.squeeze()  # remove singular dimension
         max_density = density.max()
         density_normalized = density / max_density
         
-        ray_length = torch.linspace(0, 1, density.shape[1], device=device) # generate line space along the ray
-        ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None] # generate points along the ray
-
         # find the first point where density exceeds the threshold
+        density_threshold = 0.3
         threshold_mask = density_normalized > density_threshold
         first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
         
@@ -541,38 +421,101 @@ class ViewerDensity:
         valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
         
         # calculate the ray points only up to the first exceedance
-        ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None]
-        ray_points = ray_points[valid_points_mask]
-        density_normalized = density_normalized[valid_points_mask]
+        for i in range(ray_bundle.origins.shape[0]):  # iterate over all rays
+            if ray_bundle.nears is not None and ray_bundle.fars is not None:
+                near = ray_bundle.nears[i].item()
+                far = ray_bundle.fars[i].item()
+                ray_length = torch.linspace(near, far, density.shape[1], device=device)
+            
+            for j in range(density.shape[1]):  # iterate over points in each ray
+                if valid_points_mask[i, j]:
+                    point = ray_bundle.origins[i] + ray_bundle.directions[i] * ray_length[j]
+                    normalized_density = density_normalized[i, j].item()
+                    
+                    # Define the color based on density, converting it to RGB
+                    color_intensity = int(155 * normalized_density)
+                    color = (color_intensity, 0, 0)  # Red color intensity based on density
+                    # Add sphere at this point
+                    sphere_name = f"/ray_{i}_point_{j}"
+                    self.viser_server.add_icosphere(
+                        name=sphere_name,
+                        radius=0.01  ,  # smaller radius for visualiza  tion
+                        color=color,
+                        subdivisions=2,
+                        wxyz= (0, 0, 0, 0), 
+                        position=point.cpu().detach().numpy(),
+                        visible=True
+                    )
+    
+    def from_eul_to_quad(self):
+        self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
+    
+    # def visualize_density_histogram(self, density: torch.Tensor) -> None:
+    #     # Density histogram along the rays
+    #     density = density.cpu().detach().numpy().squeeze()
+    #     fig = go.Figure()
+    #     for i, single_ray_density in enumerate(density):
+    #         fig.add_trace(go.Scatter(y=single_ray_density, mode='lines', name=f'Ray {i}'))        
+    #     fig.update_layout(title='Density along rays', 
+    #                       xaxis_title='Sample along ray', 
+    #                       yaxis_title='Density',
+    #                       legend_title='Ray Index')
+    #     fig.show()
         
-        # ürepare data for plotting
-        x, y, z = ray_points[..., 0].cpu().numpy(), ray_points[..., 1].cpu().numpy(), ray_points[..., 2].cpu().numpy()
-        color = density_normalized.detach().cpu().numpy() # color based on density
+    # def visualize_density_3d(self, origins, direction, density: torch.Tensor) -> None:
+    #     density_threshold = 0.3
+    #     device = density.device
+    #     density = density.squeeze() #remove singlar dimension
+    #     max_density = density.max()
+    #     density_normalized = density / max_density
         
-        # create 3d plot
-        trace = go.Scatter3d(
-            x=x.ravel(), y=y.ravel(), z=z.ravel(), # flatten the points
-            mode='markers',
-            marker = dict(
-                size=2,
-                color=color.ravel(),
-                colorscale='Viridis',
-                opacity =.8,
-                colorbar=dict(title='Normalized Density')
-            )
-        )
+    #     ray_length = torch.linspace(0, 1, density.shape[1], device=device) # generate line space along the ray
+    #     ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None] # generate points along the ray
+
+    #     # find the first point where density exceeds the threshold
+    #     threshold_mask = density_normalized > density_threshold
+    #     first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
         
-        layout = go.Layout(
-            title="3D Density Visualization",
-            scene=dict(
-                xaxis=dict(title='X'),
-                yaxis=dict(title='Y'),
-                zaxis=dict(title='Z')
-            )
-        )
+    #     # ensure you consider cases where no points exceed by checking the condition
+    #     valid_mask = threshold_mask.any(dim=1)
+    #     first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
         
-        fig = go.Figure(data=[trace], layout=layout)
-        fig.show()
+    #     # filter all points after the threshold exceedance
+    #     valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
+        
+    #     # calculate the ray points only up to the first exceedance
+    #     ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None]
+    #     ray_points = ray_points[valid_points_mask]
+    #     density_normalized = density_normalized[valid_points_mask]
+        
+    #     # ürepare data for plotting
+    #     x, y, z = ray_points[..., 0].cpu().numpy(), ray_points[..., 1].cpu().numpy(), ray_points[..., 2].cpu().numpy()
+    #     color = density_normalized.detach().cpu().numpy() # color based on density
+        
+    #     # create 3d plot
+    #     trace = go.Scatter3d(
+    #         x=x.ravel(), y=y.ravel(), z=z.ravel(), # flatten the points
+    #         mode='markers',
+    #         marker = dict(
+    #             size=2,
+    #             color=color.ravel(),
+    #             colorscale='Viridis',
+    #             opacity =.8,
+    #             colorbar=dict(title='Normalized Density')
+    #         )
+    #     )
+        
+    #     layout = go.Layout(
+    #         title="3D Density Visualization",
+    #         scene=dict(
+    #             xaxis=dict(title='X'),
+    #             yaxis=dict(title='Y'),
+    #             zaxis=dict(title='Z')
+    #         )
+    #     )
+        
+    #     fig = go.Figure(data=[trace], layout=layout)
+    #     fig.show()
     
     #------------------------------------------------------
     

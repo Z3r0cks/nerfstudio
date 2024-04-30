@@ -205,24 +205,18 @@ class NerfactoField(Field):
             implementation=implementation,
         )
 
-    def get_density(self, ray_samples: RaySamples) -> Tuple[Tensor, Tensor]:
-        """Computes and returns the densities."""
-        
-        # render on camera position?
-        # print("ray_samples:", ray_samples)
-        # print("Frustrum:", ray_samples.frustums)
-        
+    def get_density(self, ray_samples: RaySamples) -> Tuple[Tensor, Tensor, Tensor]:
+        """Computes and returns the densities.""" 
         if self.spatial_distortion is not None:
-            # print("if")
+            # Debugging.log("positions", ray_samples.frustums.get_positions())
             positions = ray_samples.frustums.get_positions()
             positions = self.spatial_distortion(positions)
             positions = (positions + 2.0) / 4.0
+            # Debugging.log("normalized", positions)
         else:
-            # print("else")
             positions = SceneBox.get_normalized_positions(ray_samples.frustums.get_positions(), self.aabb)
         # Make sure the tcnn gets inputs between 0 and 1.
         selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
-        # print("selector: ",selector)
         positions = positions * selector[..., None]
         self._sample_locations = positions
         if not self._sample_locations.requires_grad:
@@ -231,23 +225,22 @@ class NerfactoField(Field):
         h = self.mlp_base(positions_flat).view(*ray_samples.frustums.shape, -1)
         density_before_activation, base_mlp_out = torch.split(h, [1, self.geo_feat_dim], dim=-1)
         self._density_before_activation = density_before_activation
-
+        # Debugging.log(".average_init_density", self.average_init_density)
         # Rectifying the density with an exponential is much more stable than a ReLU or
         # softplus, because it enables high post-activation (float32) density outputs
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
-        # print("Shape: ",self._sample_locations.shape)
-        # print("")
-        # print("-----------------------------END----------------------------------")
-        return density, base_mlp_out
+        # print("11, get_density(nerfacto_field):  self._sample_locations: ", self._sample_locations.shape)
+        # Debugging.log("Density", density.shape)
+        # Debugging.log("self._sample_locations", self._sample_locations.shape)
+        Debugging.log("1: nerfacto_field.py, get_density", density.shape)
+        return density, base_mlp_out, ray_samples.frustums.get_positions()
     # --------------------------------------------------------------------------------------------   
     def get_sample_loaction(self):
         return self._sample_locations
     # --------------------------------------------------------------------------------------------
-    def get_outputs(
-        self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None
-    ) -> Dict[FieldHeadNames, Tensor]:
+    def get_outputs(self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None) -> Dict[FieldHeadNames, Tensor]:
         assert density_embedding is not None
         outputs = {}
         if ray_samples.camera_indices is None:

@@ -33,6 +33,8 @@ from nerfstudio.cameras import camera_utils
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.scene_box import OrientedBox, SceneBox
 from nerfstudio.utils.tensor_dataclass import TensorDataclass
+#---------------------------------------------------------
+from nerfstudio.utils.debugging import Debugging
 
 TORCH_DEVICE = Union[torch.device, str]
 
@@ -375,7 +377,8 @@ class Cameras(TensorDataclass):
 
         Returns:
             Rays for the given camera indices and coords.
-        """
+        """ 
+        
         # Check the argument types to make sure they're valid and all shaped correctly
         assert isinstance(camera_indices, (torch.Tensor, int)), "camera_indices must be a tensor or int"
         assert coords is None or isinstance(coords, torch.Tensor), "coords must be a tensor or None"
@@ -396,7 +399,6 @@ class Cameras(TensorDataclass):
             ), "Can only index into single camera with no batch dimensions if index is zero"
         else:
             cameras = self
-
         # If the camera indices are an int, then we need to make sure that the camera batch is 1D
         if isinstance(camera_indices, int):
             assert (

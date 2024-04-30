@@ -64,13 +64,13 @@ class Field(nn.Module):
                 pixel_area=torch.ones_like(positions[..., :1]),
             )
         )
-        density, _ = self.get_density(ray_samples)
+        density, _, = self.get_density(ray_samples)
         return density
 
     @abstractmethod
     def get_density(
         self, ray_samples: RaySamples
-    ) -> Tuple[Shaped[Tensor, "*batch 1"], Float[Tensor, "*batch num_features"]]:
+    ) -> Tuple[Shaped[Tensor, "*batch 1"], Float[Tensor, "*batch num_features"], Float[Tensor, "*locations"]]:
         """Computes and returns the densities. Returns a tensor of densities and a tensor of features.
 
         Args:
@@ -115,7 +115,7 @@ class Field(nn.Module):
             density_embedding: Density embeddings to condition on.
         """
 
-    def forward(self, ray_samples: RaySamples, compute_normals: bool = False) -> Dict[FieldHeadNames, Tensor]:
+    def forward(self, ray_samples: RaySamples, compute_normals: bool = False):
         """Evaluates the field at points along the ray.
 
         Args:
@@ -123,9 +123,13 @@ class Field(nn.Module):
         """
         if compute_normals:
             with torch.enable_grad():
-                density, density_embedding = self.get_density(ray_samples)
+                density, density_embedding, density_locations = self.get_density(ray_samples)
         else:
-            density, density_embedding = self.get_density(ray_samples)
+            density, density_embedding, density_locations = self.get_density(ray_samples)
+            
+        from nerfstudio.utils.debugging import Debugging
+        
+        Debugging.log("2: nerfacto_field.py, get_density", density.shape)
 
         field_outputs = self.get_outputs(ray_samples, density_embedding=density_embedding)
         field_outputs[FieldHeadNames.DENSITY] = density  # type: ignore
@@ -134,7 +138,7 @@ class Field(nn.Module):
             with torch.enable_grad():
                 normals = self.get_normals()
             field_outputs[FieldHeadNames.NORMALS] = normals  # type: ignore
-        return field_outputs
+        return field_outputs, density_locations
 
 
 def get_normalized_directions(directions: Float[Tensor, "*bs 3"]) -> Float[Tensor, "*bs 3"]:

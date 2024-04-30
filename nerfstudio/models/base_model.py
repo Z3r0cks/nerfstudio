@@ -35,7 +35,6 @@ from nerfstudio.data.scene_box import OrientedBox, SceneBox
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes
 from nerfstudio.model_components.scene_colliders import NearFarCollider
 
-
 # Model related configs
 @dataclass
 class ModelConfig(InstantiateConfig):
@@ -170,6 +169,12 @@ class Model(nn.Module):
         Args:
             camera: generates raybundle
         """
+        
+        raybundle =  self.get_outputs_for_camera_ray_bundle(
+            camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
+        )
+
+        # print("55 get_outputs_for_camera(base_model)", raybundle["density_locations"].shape)
         return self.get_outputs_for_camera_ray_bundle(
             camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
         )
@@ -193,6 +198,8 @@ class Model(nn.Module):
             # move the chunk inputs to the model device
             ray_bundle = ray_bundle.to(self.device)
             outputs = self.forward(ray_bundle=ray_bundle)
+            density_locations = outputs["density_locations"]
+            density = outputs["density"]
             for output_name, output in outputs.items():  # type: ignore
                 if not isinstance(output, torch.Tensor):
                     # TODO: handle lists of tensors as well
@@ -202,6 +209,12 @@ class Model(nn.Module):
         outputs = {}
         for output_name, outputs_list in outputs_lists.items():
             outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
+        outputs["density_locations"] = density_locations
+        outputs["density"] = density
+        # print("44, get_outputs_for_camera...:  self._sample_locations: ", outputs["density_locations"].shape)
+        from nerfstudio.utils.debugging import Debugging
+        
+        Debugging.log("4: base_model, get_outputs_for_camera_ray_bundle", outputs["density"].shape)
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:

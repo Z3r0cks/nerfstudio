@@ -34,3 +34,10 @@ class Debugging:
          CONSOLE.print(f"in file: ", style=style["text"],end="" )
          CONSOLE.print(frame_info.filename, style=style["element"])
          CONSOLE.print(f"on line: {frame_info.lineno} \n", style=style["text"])
+         
+   @staticmethod        
+   def log(name: str, data) -> None:
+      from nerfstudio.utils.rich_utils import CONSOLE
+      
+      CONSOLE.print(name, style="bold yellow")
+      CONSOLE.print(data, style="bold green")

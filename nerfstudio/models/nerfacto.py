@@ -308,7 +308,8 @@ class NerfactoModel(Model):
             self.camera_optimizer.apply_to_raybundle(ray_bundle)
         ray_samples: RaySamples
         ray_samples, weights_list, ray_samples_list = self.proposal_sampler(ray_bundle, density_fns=self.density_fns)
-        field_outputs = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
+        field_outputs, density_locations = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
+        # print("33, get_outputs(nerfacto):  self._sample_locations: ", density_locations.shape)
         if self.config.use_gradient_scaling:
             field_outputs = scale_gradients_by_distance_squared(field_outputs, ray_samples)
 
@@ -329,8 +330,8 @@ class NerfactoModel(Model):
             "expected_depth": expected_depth,
             "weights": weights,
             "density": field_outputs[FieldHeadNames.DENSITY],
+            "density_locations": density_locations,
         }
-
         if self.config.predict_normals:
             normals = self.renderer_normals(normals=field_outputs[FieldHeadNames.NORMALS], weights=weights)
             pred_normals = self.renderer_normals(field_outputs[FieldHeadNames.PRED_NORMALS], weights=weights)
@@ -354,6 +355,11 @@ class NerfactoModel(Model):
 
         for i in range(self.config.num_proposal_iterations):
             outputs[f"prop_depth_{i}"] = self.renderer_depth(weights=weights_list[i], ray_samples=ray_samples_list[i])
+            
+        from nerfstudio.utils.debugging import Debugging
+        
+        Debugging.log("3: nerfacto.py, get_outputs", outputs["density"].shape)
+        Debugging.print_call_stack()
         return outputs
 
     def get_metrics_dict(self, outputs, batch):

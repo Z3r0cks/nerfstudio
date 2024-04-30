@@ -116,15 +116,20 @@ class DataProcessor(mp.Process):  # type: ignore
 
     def cache_images(self):
         """Caches all input images into a NxHxWx3 tensor."""
-        indices = range(len(self.dataset))
-        batch_list = []
-        results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.max_thread_workers) as executor:
-            for idx in indices:
-                res = executor.submit(self.dataset.__getitem__, idx)
-                results.append(res)
-            for res in track(results, description="Loading data batch", transient=False):
-                batch_list.append(res.result())
+        # indices = range(len(self.dataset))
+        # batch_list = []
+        # results = []
+        # with concurrent.futures.ThreadPoolExecutor(max_workers=self.config.max_thread_workers) as executor:
+        #     for idx in indices:
+        #         res = executor.submit(self.dataset.__getitem__, idx)
+        #         results.append(res)
+        #     for res in track(results, description="Loading data batch", transient=False):
+        #         batch_list.append(res.result())
+        import pickle
+        # with open('D:/Masterthesis/debugging/dataparser/batch_list_datamanager.pkl', 'wb') as f:
+        #     pickle.dump(batch_list, f)
+        with open('D:/Masterthesis/debugging/dataparser/batch_list_datamanager.pkl', 'rb') as f:
+            batch_list = pickle.load(f)
         self.img_data = self.config.collate_fn(batch_list)
 
 
