@@ -358,8 +358,8 @@ class NerfactoModel(Model):
             
         from nerfstudio.utils.debugging import Debugging
         
-        Debugging.log("3: nerfacto.py, get_outputs", outputs["density"].shape)
-        Debugging.print_call_stack()
+        # Debugging.log("3: nerfacto.py, get_outputs", outputs["density"].shape)
+        # Debugging.print_call_stack()
         return outputs
 
     def get_metrics_dict(self, outputs, batch):

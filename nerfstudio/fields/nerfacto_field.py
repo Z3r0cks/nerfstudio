@@ -234,7 +234,7 @@ class NerfactoField(Field):
         # print("11, get_density(nerfacto_field):  self._sample_locations: ", self._sample_locations.shape)
         # Debugging.log("Density", density.shape)
         # Debugging.log("self._sample_locations", self._sample_locations.shape)
-        Debugging.log("1: nerfacto_field.py, get_density", density.shape)
+        # Debugging.log("1: nerfacto_field.py, get_density", density.shape)
         return density, base_mlp_out, ray_samples.frustums.get_positions()
     # --------------------------------------------------------------------------------------------   
     def get_sample_loaction(self):

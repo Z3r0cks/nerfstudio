@@ -214,7 +214,7 @@ class Model(nn.Module):
         # print("44, get_outputs_for_camera...:  self._sample_locations: ", outputs["density_locations"].shape)
         from nerfstudio.utils.debugging import Debugging
         
-        Debugging.log("4: base_model, get_outputs_for_camera_ray_bundle", outputs["density"].shape)
+        # Debugging.log("4: base_model, get_outputs_for_camera_ray_bundle", outputs["density"].shape)
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:

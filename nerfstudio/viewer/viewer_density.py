@@ -317,11 +317,11 @@ class ViewerDensity:
         
         self.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
 
-        self.viser_server.add_frame(
-            "/tree",
-            wxyz=(1.0, 0.0, 0.0, 0.0),
-            position=(0, 0, 0),
-        )   
+        # self.viser_server.add_frame(
+        #     "/tree",
+        #     wxyz=(1.0, 0.0, 0.0, 0.0),
+        #     position=(0, 0, 0),
+        # )   
     
     def get_density(self, origin) -> None:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

@@ -36,6 +36,7 @@ from nerfstudio.viewer_legacy.server import viewer_utils
 #-------------------------------------------------------------
 from nerfstudio.utils.debugging import Debugging
 from scipy.spatial import cKDTree
+from joblib import Parallel, delayed
 #-------------------------------------------------------------
 
 if TYPE_CHECKING:
@@ -91,8 +92,8 @@ class RenderStateMachine(threading.Thread):
         self.viser_scale_ratio = viser_scale_ratio
         self.client = client
         self.running = True
-        self.viewer.viser_server.add_gui_button("void it", color="pink").on_click(lambda _: self.void_id())
-        self.viewer.viser_server.add_gui_button("Td", color="pink").on_click(lambda _: self._show_density())
+        self.viewer.viser_server.add_gui_button("Clear Density Stack", color="red").on_click(lambda _: self.void_id())
+        self.viewer.viser_server.add_gui_button("Show Density", color="green").on_click(lambda _: self._show_density())
         
         #-------------------------------------------------------------
         self.densities = []
@@ -203,15 +204,10 @@ class RenderStateMachine(threading.Thread):
                 #     )[0, 0, :, :, None]
                 # else:
                 # Convert to z_depth if depth compositing is enabled.
-                # print("camera: ", camera)
-                # print("camera.camera_to_worlds: ", camera.camera_to_worlds)
                 R = camera.camera_to_worlds[0, 0:3, 0:3].T
-                # print("R: ", R)
                 camera_ray_bundle = camera.generate_rays(camera_indices=0, obb_box=obb)
-                # print("camera_ray_bundle: ", camera_ray_bundle)
                 pts = camera_ray_bundle.directions * outputs["depth"]
                 pts = (R @ (pts.view(-1, 3).T)).T.view(*camera_ray_bundle.directions.shape)
-                # print("pts: ", pts)
                 outputs["gl_z_buf_depth"] = -pts[..., 2:3]  # negative z axis is the coordinate convention
         render_time = vis_t.duration
         if writer.is_initialized() and render_time != 0:
@@ -246,31 +242,41 @@ class RenderStateMachine(threading.Thread):
                 # if we got interrupted, don't send the output to the viewer
                 continue
             
-            self.densities.append(outputs["density"])
-            self.density_locations.append(outputs["density_locations"])
+            self.densities.extend(outputs["density"])
+            self.density_locations.extend(outputs["density_locations"])
             
-            print(len(self.densities))
-            print(len(self.density_locations))
+            print("Density Stack Length: ", len(self.densities))
 
             self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
             # self.viewer.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self._show_density())
             # self._show_density(outputs["density"], outputs["density_locations"])
+            
+    def mark_nearby(self, tree, point, distance_threshold):
+        return tree.query_ball_point(point, r=distance_threshold, p=2)
 
-    def filter_nearby_points(self, points, distance_threshold=0.008):
+    def filter_nearby_indices(self, points, distance_threshold=0.003, n_jobs=4):
+        """Returns indices of points that are not removed due to proximity"""
+        from scipy.spatial import cKDTree
+        from concurrent.futures import ThreadPoolExecutor
+
+        # Aufbau eines KD-Baums für schnelle Nachbarschaftssuche
         tree = cKDTree(points)
-        kept_indices = np.ones(len(points), dtype=bool)  # Markiert, welche Punkte behalten werden
+        kept_indices = np.ones(len(points), dtype=bool)
 
-        for i in range(len(points)):
-            if kept_indices[i]:  # Wenn dieser Punkt noch nicht verworfen wurde
-                # Finde alle anderen Punkte in der Nähe dieses Punktes, verwende Euklidische Distanz (p=2)
-                nearby_indices = tree.query_ball_point(points[i], r=distance_threshold, p=2)
-                # Setze alle anderen Punkte in der Nähe auf "nicht behalten", außer den aktuellen Punkt
+        def process_point(i):
+            if kept_indices[i]:
+                # Suche alle nahen Punkte, die innerhalb des Schwellenwerts liegen
+                nearby_indices = self.mark_nearby(tree, points[i], distance_threshold)
                 kept_indices[nearby_indices] = False
-                kept_indices[i] = True  # Stelle sicher, dass dieser Punkt behalten wird
+                kept_indices[i] = True
 
-        # Erzeuge den Array der gefilterten Punkte
-        filtered_points = points[kept_indices]
-        return filtered_points
+        # Parallelverarbeitung der Punkte mit ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=n_jobs) as executor:
+            list(executor.map(process_point, range(len(points))))
+
+        # Rückgabe der Indizes der verbleibenden Punkte
+        return np.where(kept_indices)[0]
+
     
     def _show_density(self):
         """Show the density in the viewer
@@ -279,71 +285,64 @@ class RenderStateMachine(threading.Thread):
             density_location: the density location
         """
         
-        import random
+        # import random
         import string
-        import plotly.graph_objects as go
+        import open3d as o3d
         
-        threshold = 0.6
-        # print(self.densities[0].shape)
-        for i in range(len(self.densities)):
-            density = self.densities[i]
-            density_location = self.density_locations[i]
+        # import viser
 
-            density = density.squeeze().cpu()
-            density_location = density_location.cpu()
-            mask = density > threshold
-            density_location = density_location[mask]
-            density_location = density_location.detach().numpy()
-            # density = density[mask]
-            # density = density.detach().numpy()
-            print("in", density_location.shape)
-            filtered_density_location = self.filter_nearby_points(density_location)
-            print("out",filtered_density_location.shape)
-            letters = string.ascii_letters 
-            random_string = ''.join(random.choice(letters) for _ in range(3))
-            
-            for i in range(0, len(filtered_density_location), 10):
-                position = (density_location[i][0].item(), density_location[i][1].item(), density_location[i][2].item())
-                self.viewer.viser_server.add_icosphere(
-                    name=f"{random_string}_point_{i}",
-                    subdivisions=1,
-                    wxyz=(0, 0, 0, 0),
-                    radius=0.008,
-                    color=(200, 0, 200),
-                    position=position, 
-                    visible=True
-            )
-            
-            # normalized_density = (density - density.min()) / (density.max() - density.min())
-            
-        #     trace = go.Scatter3d(
-        #         x=density_location[:, 0],  # X Koordinaten aller Punkte
-        #         y=density_location[:, 1],  # Y Koordinaten aller Punkte
-        #         z=density_location[:, 2],  # Z Koordinaten aller Punkte
-        #         mode='markers',
-        #         marker=dict(
-        #             size=2,
-        #             color=normalized_density,  # Verwendung der normalisierten Dichte als Farbwert
-        #             colorscale='Viridis',
-        #             opacity=0.8,
-        #             colorbar=dict(title='Normalized Density')
-        #         )
-        #     )
-                
-        #     # Erstellen des Layouts für den Plot
-        #     layout = go.Layout(
-        #         title="3D Density Visualization",
-        #         scene=dict(
-        #             xaxis=dict(title='X'),
-        #             yaxis=dict(title='Y'),
-        #             zaxis=dict(title='Z')
-        #         )
-        #     )
+        threshold = 0.3
 
-        # # Kombinieren von Trace und Layout in einer Figur und Anzeigen des Plots
-        # fig = go.Figure(data=[trace], layout=layout)
-        # fig.show()
+        # Alle Density- und Location-Daten flach zusammenführen
+        all_densities = []
+        all_locations = []
 
+        for density, location in zip(self.densities, self.density_locations):
+            # Konvertiere die Tensoren zu NumPy-Arrays
+            density = density.squeeze().cpu().detach().numpy()
+            location = location.cpu().detach().numpy()
+
+            # Alle Werte in die flache Liste aufnehmen
+            all_densities.extend(density)
+            all_locations.extend(location)
+
+        # Konvertiere zu NumPy-Arrays für effiziente Verarbeitung
+        all_densities = np.array(all_densities)
+        all_locations = np.array(all_locations)
+
+        # Anwenden des Schwellwerts auf die gesamten Daten
+        mask = all_densities > threshold
+        filtered_densities = all_densities[mask]
+        filtered_locations = all_locations[mask]
+        
+
+        remaining_indices = self.filter_nearby_indices(filtered_locations)
+        # Normalisierung der gefilterten Dichtewerte
+        filtered_locations = filtered_locations[remaining_indices]
+        filtered_densities = filtered_densities[remaining_indices]
+        normalized_density = (filtered_densities - filtered_densities.min()) / (filtered_densities.max() - filtered_densities.min())
+        
+        # Erstelle ein Open3D Punktwolken-Objekt
+        point_cloud = o3d.geometry.PointCloud()
+        point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
+
+        # Optional: Farbe der Punkte anpassen (falls notwendig)
+        colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # RGB-Farben
+        point_cloud.colors = o3d.utility.Vector3dVector(colors)
+
+        # Speichere die Punktwolke im PLY-Format
+        o3d.io.write_point_cloud("exported_point_cloud.ply", point_cloud)
+        
+        # Erstelle ein Open3D Punktwolken-Objekt
+        # point_cloud = o3d.geometry.PointCloud()
+        # point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
+
+        # # Optional: Farbe der Punkte anpassen (Beispiel)
+        # colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # RGB-Farben
+        # point_cloud.colors = o3d.utility.Vector3dVector(colors)
+
+        # # Visualisiere die Punktwolke mit `draw_geometries`
+        # o3d.visualization.draw_geometries([point_cloud])
         # for ray_idx, ray in enumerate(density_location):
         #     for sample_idx, sample in enumerate(ray):
         #         sphere_name = f"ray_{ray_idx}_sample_{sample_idx}"
