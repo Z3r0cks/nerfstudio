@@ -324,8 +324,7 @@ class ViewerDensity:
         # )   
     
     def get_density(self, origin) -> None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print("test")
+        # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         clients = self.viser_server.get_clients()
         # clients.keys()
         for id in clients:

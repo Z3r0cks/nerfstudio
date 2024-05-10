@@ -231,10 +231,6 @@ class NerfactoField(Field):
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
-        # print("11, get_density(nerfacto_field):  self._sample_locations: ", self._sample_locations.shape)
-        # Debugging.log("Density", density.shape)
-        # Debugging.log("self._sample_locations", self._sample_locations.shape)
-        # Debugging.log("1: nerfacto_field.py, get_density", density.shape)
         return density, base_mlp_out, ray_samples.frustums.get_positions()
     # --------------------------------------------------------------------------------------------   
     def get_sample_loaction(self):

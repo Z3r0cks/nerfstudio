@@ -92,10 +92,14 @@ class RenderStateMachine(threading.Thread):
         self.viser_scale_ratio = viser_scale_ratio
         self.client = client
         self.running = True
-        self.viewer.viser_server.add_gui_button("Clear Density Stack", color="red").on_click(lambda _: self.void_id())
-        self.viewer.viser_server.add_gui_button("Show Density", color="green").on_click(lambda _: self._show_density())
         
         #-------------------------------------------------------------
+        self.density_threshold = 0.5
+        self.viewer.viser_server.add_gui_button("Clear Density Stack", color="red").on_click(lambda _: self.void_id())
+        self.viewer.viser_server.add_gui_button("Show Density", color="green").on_click(lambda _: self._show_density())
+        self.slider = self.viewer.viser_server.add_gui_slider("Threshold", 0, 1, 0.1, 0.5)
+        self.slider.on_update(lambda value: setattr(self, "density_threshold", self.slider.value))
+        
         self.densities = []
         self.density_locations = []
 
@@ -248,8 +252,6 @@ class RenderStateMachine(threading.Thread):
             print("Density Stack Length: ", len(self.densities))
 
             self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
-            # self.viewer.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self._show_density())
-            # self._show_density(outputs["density"], outputs["density_locations"])
             
     def mark_nearby(self, tree, point, distance_threshold):
         return tree.query_ball_point(point, r=distance_threshold, p=2)
@@ -288,77 +290,66 @@ class RenderStateMachine(threading.Thread):
         # import random
         import string
         import open3d as o3d
+        import matplotlib.pyplot as plt
         
         # import viser
+        
+        filtered_locations = []
+        filtered_densities = []
+        
+        print( self.density_threshold)
+        for ray_locations, ray_densities in zip(self.density_locations, self.densities):
+            normalized_density = (ray_densities - ray_densities.min()) / (ray_densities.max() - ray_densities.min())
+        # Finde den Index des ersten Punktes, der den Threshold überschreitet
+            mask = normalized_density.squeeze() > self.density_threshold
+            if torch.any(mask):
+                first_index = torch.where(mask)[0][0]
+                filtered_locations.append(ray_locations[first_index].unsqueeze(0))
+                filtered_densities.append(ray_densities[first_index].unsqueeze(0))
+            else:
+                # Wenn kein Punkt den Threshold überschreitet, nimm alle Punkte
+                pass
 
-        threshold = 0.3
-
-        # Alle Density- und Location-Daten flach zusammenführen
-        all_densities = []
-        all_locations = []
-
-        for density, location in zip(self.densities, self.density_locations):
-            # Konvertiere die Tensoren zu NumPy-Arrays
-            density = density.squeeze().cpu().detach().numpy()
-            location = location.cpu().detach().numpy()
-
-            # Alle Werte in die flache Liste aufnehmen
-            all_densities.extend(density)
-            all_locations.extend(location)
-
-        # Konvertiere zu NumPy-Arrays für effiziente Verarbeitung
-        all_densities = np.array(all_densities)
-        all_locations = np.array(all_locations)
-
+        # # Konvertiere Listen zurück in Tensoren, wenn nötig
+        filtered_locations = torch.cat(filtered_locations)
+        filtered_densities = torch.cat(filtered_densities)
+        filtered_locations = filtered_locations.cpu().numpy()
+        filtered_densities = filtered_densities.cpu().numpy()
+        
+        # print(filtered_locations)
+        # print(filtered_locations.shape)
         # Anwenden des Schwellwerts auf die gesamten Daten
-        mask = all_densities > threshold
-        filtered_densities = all_densities[mask]
-        filtered_locations = all_locations[mask]
-        
-
-        remaining_indices = self.filter_nearby_indices(filtered_locations)
+        #  [-0.94722855 -0.98545617 -0.5135705  ...  0.7805776   0.6662066
+        #  -0.6166086 ]
+        # (38064,)
+        # remaining_indices = self.filter_nearby_indices(filtered_locations)
         # Normalisierung der gefilterten Dichtewerte
-        filtered_locations = filtered_locations[remaining_indices]
-        filtered_densities = filtered_densities[remaining_indices]
-        normalized_density = (filtered_densities - filtered_densities.min()) / (filtered_densities.max() - filtered_densities.min())
+        # filtered_locations = filtered_locations[remaining_indices]
+        # filtered_densities = filtered_densities[remaining_indices]
+        # normalized_density = (filtered_densities - filtered_densities.min()) / (filtered_densities.max() - filtered_densities.min())
         
-        # Erstelle ein Open3D Punktwolken-Objekt
+        # Erstelle ein Open3D Punktwolken-Objekt 
         point_cloud = o3d.geometry.PointCloud()
         point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
-
-        # Optional: Farbe der Punkte anpassen (falls notwendig)
-        colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # RGB-Farben
+        colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         point_cloud.colors = o3d.utility.Vector3dVector(colors)
-
-        # Speichere die Punktwolke im PLY-Format
-        o3d.io.write_point_cloud("exported_point_cloud.ply", point_cloud)
-        
-        # Erstelle ein Open3D Punktwolken-Objekt
-        # point_cloud = o3d.geometry.PointCloud()
-        # point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
-
-        # # Optional: Farbe der Punkte anpassen (Beispiel)
-        # colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])  # RGB-Farben
-        # point_cloud.colors = o3d.utility.Vector3dVector(colors)
-
-        # # Visualisiere die Punktwolke mit `draw_geometries`
-        # o3d.visualization.draw_geometries([point_cloud])
-        # for ray_idx, ray in enumerate(density_location):
+        o3d.visualization.ViewControl()
+        o3d.visualization.draw_geometries([point_cloud])
+        # for ray_idx, ray in enumerate(filtered_locations):
         #     for sample_idx, sample in enumerate(ray):
         #         sphere_name = f"ray_{ray_idx}_sample_{sample_idx}"
-                
-        #         print("sample ", sample)
-        #         # detach the tensor from the computation graph
-        #         sample_detached = sample.detach() # Detach the tensor
-        #         # sample_tuple = tuple(sample_detached.numpy()) # Convert to NumPy array then to tuple
-        #         # self.viewer.viser_server.add_icosphere(
-        #         #     name=sphere_name,
-        #         #     subdivisions=2,
-        #         #     wxyz= (0, 0, 0, 0),
-        #         #     radius=0.005,
-        #         #     color=(155, 0, 0),
-        #         #     position=sample_tuple,  # Konvertiere NumPy Array zu Tuple
-        #         #     visible=True
+
+                # detach the tensor from the computation graph
+                # sample_detached = sample.detach() # Detach the tensor
+                # sample_tuple = tuple(ssample.numpy()) # Convert to NumPy array then to tuple
+                # self.viewer.viser_server.add_icosphere(
+                #     name=sphere_name,
+                #     subdivisions=2,
+                #     wxyz= (0, 0, 0, 0),
+                #     radius=0.005,
+                #     color=(155, 0, 0),
+                #     position=sample_tuple,  # Konvertiere NumPy Array zu Tuple
+                #     visible=True
                 # )
                  
     def check_interrupt(self, frame, event, arg):
