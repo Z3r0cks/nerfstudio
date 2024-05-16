@@ -99,28 +99,28 @@ class CacheDataloader(DataLoader):
     def _get_batch_list(self):
         """Returns a list of batches from the dataset attribute."""
 
-        # assert isinstance(self.dataset, Sized)
-        # indices = random.sample(range(len(self.dataset)), k=self.num_images_to_sample_from)
-        # batch_list = []
-        # results = []
+        assert isinstance(self.dataset, Sized)
+        indices = random.sample(range(len(self.dataset)), k=self.num_images_to_sample_from)
+        batch_list = []
+        results = []
 
-        # num_threads = int(self.num_workers) * 4
-        # num_threads = min(num_threads, multiprocessing.cpu_count() - 1)
-        # num_threads = max(num_threads, 1)
+        num_threads = int(self.num_workers) * 4
+        num_threads = min(num_threads, multiprocessing.cpu_count() - 1)
+        num_threads = max(num_threads, 1)
 
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
-        #     for idx in indices:
-        #         res = executor.submit(self.dataset.__getitem__, idx)
-        #         results.append(res)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+            for idx in indices:
+                res = executor.submit(self.dataset.__getitem__, idx)
+                results.append(res)
 
-        #     for res in track(results, description="Loading data batch", transient=True):
-        #         batch_list.append(res.result())
+            for res in track(results, description="Loading data batch", transient=True):
+                batch_list.append(res.result())
 
                 
-        import pickle
+        # import pickle
 
-        with open('D:/Masterthesis/debugging/dataparser/batch_list.pkl', 'rb') as f:
-            batch_list = pickle.load(f)
+        # with open('D:/Masterthesis/debugging/dataparser/batch_list.pkl', 'rb') as f:
+        #     batch_list = pickle.load(f)
         # else:le
             # with open('D:/Masterthesis/debugging/dataparser/dataparser_outputs_test.pkl', 'rb') as f:
             #     dataparser_outputs = pickle.load(f)

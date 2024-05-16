@@ -97,12 +97,12 @@ class RenderStateMachine(threading.Thread):
         self.density_threshold = 0.5
         self.viewer.viser_server.add_gui_button("Clear Density Stack", color="red").on_click(lambda _: self.void_id())
         self.viewer.viser_server.add_gui_button("Show Density", color="green").on_click(lambda _: self._show_density())
-        self.slider = self.viewer.viser_server.add_gui_slider("Threshold", 0, 1, 0.1, 0.5)
+        self.slider = self.viewer.viser_server.add_gui_slider("Threshold", -5, 5, 0.1, 0)
         self.slider.on_update(lambda value: setattr(self, "density_threshold", self.slider.value))
         
         self.densities = []
         self.density_locations = []
-
+    
     def void_id(self):
         self.densities = []
         self.density_locations = []
@@ -291,66 +291,104 @@ class RenderStateMachine(threading.Thread):
         import string
         import open3d as o3d
         import matplotlib.pyplot as plt
-        
-        # import viser
-        
+        import viser
+    
+
         filtered_locations = []
-        filtered_densities = []
-        
-        print( self.density_threshold)
+        # filtered_densities = []
+        # last_ray_point = []
+
+        # Berechne globalen Mittelwert und Standardabweichung über alle Dichtewerte
+        all_densities = torch.cat([ray_densities for ray_densities in self.densities if ray_densities.numel() > 0])
+        global_mean = torch.mean(all_densities)
+        global_std = torch.std(all_densities)
+
         for ray_locations, ray_densities in zip(self.density_locations, self.densities):
-            normalized_density = (ray_densities - ray_densities.min()) / (ray_densities.max() - ray_densities.min())
-        # Finde den Index des ersten Punktes, der den Threshold überschreitet
-            mask = normalized_density.squeeze() > self.density_threshold
+            if ray_densities.numel() == 0:
+                continue
+            
+            # standardisieren
+            standardized_densities = (ray_densities - global_mean) / global_std
+            mask = standardized_densities.squeeze() > self.density_threshold
+            # min_value = standardized_densities.min()
+            # print("lowest value:", min_value.item())
+            # last_ray_point.append(ray_locations[-1].unsqueeze(0))
             if torch.any(mask):
                 first_index = torch.where(mask)[0][0]
                 filtered_locations.append(ray_locations[first_index].unsqueeze(0))
-                filtered_densities.append(ray_densities[first_index].unsqueeze(0))
+                # filtered_densities.append(ray_densities[first_index].unsqueeze(0))
             else:
-                # Wenn kein Punkt den Threshold überschreitet, nimm alle Punkte
+                # filtered_locations.append(ray_locations[-1].unsqueeze(0))
                 pass
-
-        # # Konvertiere Listen zurück in Tensoren, wenn nötig
+        # list  in Tensoren 
         filtered_locations = torch.cat(filtered_locations)
-        filtered_densities = torch.cat(filtered_densities)
-        filtered_locations = filtered_locations.cpu().numpy()
-        filtered_densities = filtered_densities.cpu().numpy()
+        # # filtered_densities = torch.cat(filtered_densities)
         
-        # print(filtered_locations)
-        # print(filtered_locations.shape)
-        # Anwenden des Schwellwerts auf die gesamten Daten
-        #  [-0.94722855 -0.98545617 -0.5135705  ...  0.7805776   0.6662066
-        #  -0.6166086 ]
-        # (38064,)
+        filtered_locations = filtered_locations.cpu().numpy()
+        # filtered_densities = filtered_densities.cpu().numpy()
+
         # remaining_indices = self.filter_nearby_indices(filtered_locations)
-        # Normalisierung der gefilterten Dichtewerte
+        # # Normalisierung der gefilterten Dichtewerte
         # filtered_locations = filtered_locations[remaining_indices]
         # filtered_densities = filtered_densities[remaining_indices]
         # normalized_density = (filtered_densities - filtered_densities.min()) / (filtered_densities.max() - filtered_densities.min())
         
-        # Erstelle ein Open3D Punktwolken-Objekt 
+        # 3D point cloud visualisieren 
         point_cloud = o3d.geometry.PointCloud()
         point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
         colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         point_cloud.colors = o3d.utility.Vector3dVector(colors)
         o3d.visualization.ViewControl()
         o3d.visualization.draw_geometries([point_cloud])
-        # for ray_idx, ray in enumerate(filtered_locations):
-        #     for sample_idx, sample in enumerate(ray):
-        #         sphere_name = f"ray_{ray_idx}_sample_{sample_idx}"
-
-                # detach the tensor from the computation graph
-                # sample_detached = sample.detach() # Detach the tensor
-                # sample_tuple = tuple(ssample.numpy()) # Convert to NumPy array then to tuple
-                # self.viewer.viser_server.add_icosphere(
-                #     name=sphere_name,
-                #     subdivisions=2,
-                #     wxyz= (0, 0, 0, 0),
-                #     radius=0.005,
-                #     color=(155, 0, 0),
-                #     position=sample_tuple,  # Konvertiere NumPy Array zu Tuple
-                #     visible=True
-                # )
+                  
+        # server = viser.ViserServer()
+        # for index, location in enumerate(filtered_locations):
+        #     self.add_point_as_mesh(location, index)
+            # self.viewer.viser_server.add_icosphere(
+            #     name=sphere_name,
+            #     subdivisions=2,
+            #     wxyz= (0, 0, 0, 0),
+            #     radius=0.03,
+            #     color=(255, 0, 255),
+            #     position=(location[0] * 10, location[1] * 10, location[2] * 10),  # Konvertiere NumPy Array zu Tuple
+            #     visible=True
+            # )
+        #     # server.add_icosphere(
+        #     #     name=sphere_name,
+        #     #     subdivisions=2,
+        #     #     wxyz= (0, 0, 0, 0),
+        #     #     radius=0.005,
+        #     #     color=(155, 0, 0),
+        #     #     position=(location[0] * 10, location[1] * 10, location[2] * 10),  # Konvertiere NumPy Array zu Tuple
+        #     #     visible=True
+        #     # )
+            
+    def add_point_as_mesh(self, location, index, scale_factor=10, base_size=0.005, color=(255, 0, 255)):
+        
+        half_size = base_size / 2 * scale_factor 
+        vertices = np.array([
+        [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
+        [location[0] * scale_factor + half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
+        [location[0] * scale_factor + half_size, location[1] * scale_factor + half_size, location[2] * scale_factor],
+        [location[0] * scale_factor - half_size, location[1] * scale_factor + half_size, location[2] * scale_factor]
+    ])
+        faces = np.array([
+            [0, 1, 2],
+            [0, 2, 3]
+        ])
+        
+        # mesh name
+        mesh_name = f"location_{index}"
+        
+        # add to viewer
+        self.viewer.viser_server.add_mesh_simple(
+            name=mesh_name,
+            vertices=vertices,
+            faces=faces,
+            color=color,
+            position=(0, 0, 0),  # position bereits in vertices definiert
+            visible=True
+        )
                  
     def check_interrupt(self, frame, event, arg):
         """Raises interrupt when flag has been set and not already on lowest resolution.
