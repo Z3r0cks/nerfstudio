@@ -140,6 +140,17 @@ class Model(nn.Module):
             ray_bundle = self.collider(ray_bundle)
 
         return self.get_outputs(ray_bundle)
+    
+    def test_origin(self):
+        origin = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)  # Benutzerdefinierter Ursprungspunkt
+        directions = torch.tensor([
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0]
+        ], dtype=torch.float32)  # Beispielhafte Richtungen
+
+        outputs = self.get_outputs_for_custom_rays(origin, directions)
+        print("outputs: ", outputs)
 
     def get_metrics_dict(self, outputs, batch) -> Dict[str, torch.Tensor]:
         """Compute and returns metrics.
@@ -161,6 +172,73 @@ class Model(nn.Module):
             metrics_dict: dictionary of metrics, some of which we can use for loss
         """
 
+    def get_outputs_for_custom_rays(self, origin: torch.Tensor, directions: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """Berechnet die Ausgaben des Modells für benutzerdefinierte Rays.
+
+        Args:
+            origin: Ursprungspunkt der Rays.
+            directions: Richtungen der Rays.
+        """
+        num_rays = directions.shape[0]
+        ray_bundle = self.generate_custom_rays(origin, directions, num_rays)
+        input_device = directions.device
+        num_rays_per_chunk = self.config.eval_num_rays_per_chunk
+        outputs_lists = defaultdict(list)
+        
+        for i in range(0, num_rays, num_rays_per_chunk):
+            start_idx = i
+            end_idx = i + num_rays_per_chunk
+            ray_bundle_chunk = ray_bundle.get_row_major_sliced_ray_bundle(start_idx, end_idx)
+            ray_bundle_chunk = ray_bundle_chunk.to(self.device)
+            outputs = self.forward(ray_bundle=ray_bundle_chunk)
+            density_locations = outputs["density_locations"]
+            density = outputs["density"]
+            
+            for output_name, output in outputs.items():
+                if not isinstance(output, torch.Tensor):
+                    continue
+                outputs_lists[output_name].append(output.to(input_device))
+        
+        outputs = {}
+        for output_name, outputs_list in outputs_lists.items():
+            outputs[output_name] = torch.cat(outputs_list).view(-1, outputs_list[0].shape[-1])
+        
+        outputs["density_locations"] = density_locations
+        outputs["density"] = density
+        
+        return outputs
+    
+    def calculate_pixel_area(self, directions: torch.Tensor) -> torch.Tensor:
+        # Placeholder: Pixelbereich-Berechnung basierend auf den Richtungen (hier einfach auf 1 gesetzt)
+        return torch.ones(directions.shape[:-1] + (1,), device=directions.device)
+    
+    def generate_custom_rays(self, origin: torch.Tensor, directions: torch.Tensor, num_rays: int) -> RayBundle:
+        """
+        Generiert ein benutzerdefiniertes RayBundle basierend auf einem Ursprungspunkt und den Richtungen.
+
+        Args:
+            origin: Tensor der Form (3,), der den Ursprungspunkt der Rays repräsentiert.
+            directions: Tensor der Form (num_rays, 3), der die Richtungen der Rays repräsentiert.
+            num_rays: Anzahl der zu generierenden Rays.
+
+        Returns:
+            RayBundle: Ein RayBundle mit den generierten Rays.
+        """
+        # Normalisiere die Richtungen
+        directions = directions / torch.norm(directions, dim=-1, keepdim=True)
+        
+        # Berechne die Pixelbereiche (hier als 1 angenommen)
+        pixel_area = self.calculate_pixel_area(directions)
+        
+        # Erstelle das RayBundle
+        raybundle = RayBundle(
+            origins=origin.expand(num_rays, -1),  # Expandiert den Ursprung zu den Richtungen
+            directions=directions,
+            pixel_area=pixel_area
+        )
+    
+        return raybundle
+    
     @torch.no_grad()
     def get_outputs_for_camera(self, camera: Cameras, obb_box: Optional[OrientedBox] = None) -> Dict[str, torch.Tensor]:
         """Takes in a camera, generates the raybundle, and computes the output of the model.
@@ -170,14 +248,19 @@ class Model(nn.Module):
             camera: generates raybundle
         """
         
-        raybundle =  self.get_outputs_for_camera_ray_bundle(
+        test = self.get_outputs_for_camera_ray_bundle(
             camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
         )
-
-        # print("55 get_outputs_for_camera(base_model)", raybundle["density_locations"].shape)
+        
+        from nerfstudio.utils.debugging import Debugging as db 
+        
+        db.log("weights", test["weights"].shape)
+        
         return self.get_outputs_for_camera_ray_bundle(
             camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
         )
+        
+    
 
     @torch.no_grad()
     def get_outputs_for_camera_ray_bundle(self, camera_ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:
@@ -211,10 +294,6 @@ class Model(nn.Module):
             outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
         outputs["density_locations"] = density_locations
         outputs["density"] = density
-        # print("44, get_outputs_for_camera...:  self._sample_locations: ", outputs["density_locations"].shape)
-        from nerfstudio.utils.debugging import Debugging
-        
-        # Debugging.log("4: base_model, get_outputs_for_camera_ray_bundle", outputs["density"].shape)
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:
@@ -249,7 +328,7 @@ class Model(nn.Module):
         TODO: This shouldn't return a loss
 
         Args:
-            image_idx: Index of the image.
+            image_idx: Index of the image. 
             step: Current step.
             batch: Batch of data.
             outputs: Outputs of the model.

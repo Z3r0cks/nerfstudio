@@ -472,7 +472,7 @@ class Cameras(TensorDataclass):
         # If we have mandated that we don't keep the shape, then we flatten
         if keep_shape is False:
             raybundle = raybundle.flatten()
-
+            
         if aabb_box is not None or obb_box is not None:
             with torch.no_grad():
                 rays_o = raybundle.origins.contiguous()

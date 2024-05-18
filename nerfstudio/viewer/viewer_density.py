@@ -49,18 +49,17 @@ from nerfstudio.viewer.utils import CameraState, parse_object
 from nerfstudio.viewer.viewer_elements import ViewerControl, ViewerElement
 from nerfstudio.viewer_legacy.server import viewer_utils
 #-------------------------------------------------------------
-from nerfstudio.fields.base_field import Field
-from nerfstudio.fields.nerfacto_field import NerfactoField
-from nerfstudio.fields.density_fields import HashMLPDensityField
+# from nerfstudio.fields.base_field import Field
+# from nerfstudio.fields.nerfacto_field import NerfactoField
+# from nerfstudio.fields.density_fields import HashMLPDensityField
 from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
-from mpl_toolkits.mplot3d import Axes3D
-from nerfstudio.utils.debugging import Debugging
-from scipy.spatial.transform import Rotation as R
+# from mpl_toolkits.mplot3d import Axes3D
+# from nerfstudio.utils.debugging import Debugging
+# from scipy.spatial.transform import Rotation as R
 from nerfstudio.viewer.render_state_machine import RenderAction
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
-
 
 VISER_NERFSTUDIO_SCALE_RATIO: float = 10.0
 
@@ -204,10 +203,10 @@ class ViewerDensity:
         # self.show_images.visible = False
         mkdown = self.make_stats_markdown(0, "0x0px")
         self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
-        self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
+        # self.box = self.viser_server.add_box(name="box", color=(43, 42, 65), dimensions=(.2, .1, .1), wxyz=(1, 0, 0, 0), position=(1.50, 0.5, -3.65))
         #------------------------------------------------------
 
-        self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
+        # self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
         
         #------------------------------------------------------
         
@@ -297,25 +296,25 @@ class ViewerDensity:
         self.ready = True
 
     #------------------------------------------------------ 
-    def add_gui(self) -> None:
-        self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
-        self.box_pos_x = self.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 1.50)
-        self.box_pos_y = self.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0.5)
-        self.box_pos_z = self.viser_server.add_gui_slider("Pos Z", -4, 4, 0.01, -3.65)
+    # def add_gui(self) -> None:
+    #     self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
+    #     self.box_pos_x = self.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 1.50)
+    #     self.box_pos_y = self.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0.5)
+    #     self.box_pos_z = self.viser_server.add_gui_slider("Pos Z", -4, 4, 0.01, -3.65)
         
-        self.box_pos_x.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
-        self.box_pos_y.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
-        self.box_pos_z.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+    #     self.box_pos_x.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+    #     self.box_pos_y.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
+    #     self.box_pos_z.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
 
-        self.box_wxyz_x = self.viser_server.add_gui_slider("X", -180, 180, 0.1, 0)
-        self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -180, 180, 0.1, 0)
-        self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -180, 180, 0.1, 0)
+    #     self.box_wxyz_x = self.viser_server.add_gui_slider("X", -180, 180, 0.1, 0)
+    #     self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -180, 180, 0.1, 0)
+    #     self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -180, 180, 0.1, 0)
         
-        self.box_wxyz_x.on_update(lambda _: self.from_eul_to_quad())
-        self.box_wxyz_y.on_update(lambda _: self.from_eul_to_quad())
-        self.box_wxyz_z.on_update(lambda _: self.from_eul_to_quad())
+    #     self.box_wxyz_x.on_update(lambda _: self.from_eul_to_quad())
+    #     self.box_wxyz_y.on_update(lambda _: self.from_eul_to_quad())
+        # self.box_wxyz_z.on_update(lambda _: self.from_eul_to_quad())
         
-        self.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
+    #     self.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
 
         # self.viser_server.add_frame(
         #     "/tree",
@@ -446,8 +445,8 @@ class ViewerDensity:
                         visible=True
                     )
     
-    def from_eul_to_quad(self):
-        self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
+    # def from_eul_to_quad(self):
+    #     self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
     
     # def visualize_density_histogram(self, density: torch.Tensor) -> None:
     #     # Density histogram along the rays

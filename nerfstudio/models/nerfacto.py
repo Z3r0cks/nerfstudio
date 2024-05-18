@@ -356,10 +356,6 @@ class NerfactoModel(Model):
         for i in range(self.config.num_proposal_iterations):
             outputs[f"prop_depth_{i}"] = self.renderer_depth(weights=weights_list[i], ray_samples=ray_samples_list[i])
             
-        from nerfstudio.utils.debugging import Debugging
-        
-        # Debugging.log("3: nerfacto.py, get_outputs", outputs["density"].shape)
-        # Debugging.print_call_stack()
         return outputs
 
     def get_metrics_dict(self, outputs, batch):
