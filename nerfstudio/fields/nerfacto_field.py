@@ -208,15 +208,14 @@ class NerfactoField(Field):
     def get_density(self, ray_samples: RaySamples) -> Tuple[Tensor, Tensor, Tensor]:
         """Computes and returns the densities.""" 
         if self.spatial_distortion is not None:
-            # Debugging.log("positions", ray_samples.frustums.get_positions())
             positions = ray_samples.frustums.get_positions()
             positions = self.spatial_distortion(positions)
             positions = (positions + 2.0) / 4.0
-            # Debugging.log("normalized", positions)
         else:
             positions = SceneBox.get_normalized_positions(ray_samples.frustums.get_positions(), self.aabb)
         # Make sure the tcnn gets inputs between 0 and 1.
         selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
+        print("selector", selector.shape)
         positions = positions * selector[..., None]
         self._sample_locations = positions
         if not self._sample_locations.requires_grad:

@@ -39,6 +39,7 @@ from nerfstudio.utils.debugging import Debugging
 # from scipy.spatial import cKDTree
 # from joblib import Parallel, delayed
 from scipy.spatial.transform import Rotation as R
+import viser
 
 #-------------------------------------------------------------
 
@@ -99,8 +100,9 @@ class RenderStateMachine(threading.Thread):
         #-------------------------------------------------------------
         self.density_threshold = 0
         self.FOV = 60
-        self.FOV_width = 512
-        self.FOV_height = 275
+        self.FOV_width = 59
+        self.FOV_height = 59
+        self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())
         
@@ -285,7 +287,7 @@ class RenderStateMachine(threading.Thread):
     
     def add_gui(self) -> None:
         
-        with self.viewer.viser_server.add_gui_folder("Density Options FOV"):
+        with self.viewer.viser_server.add_gui_folder("Density Options FOV", expand_by_default=False):
             self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
             self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
@@ -294,101 +296,91 @@ class RenderStateMachine(threading.Thread):
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
             self.viewer.viser_server.add_gui_button("Create Density", color="green").on_click(lambda _: self._show_density())
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
-            
-        with self.viewer.viser_server.add_gui_folder("Box Settings"):
-            self.box_fov = self.viewer.viser_server.add_gui_slider("Box FOV", 0, 360, 1, 60)
-            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 30, 1080, 1, 512)
-            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 30, 1920, 1, 275)
-
-        with self.viewer.viser_server.add_gui_folder("Point Cloud Options"):
             self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
             
-        self.box = self.viewer.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
-        self.box = self.viewer.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
+        with self.viewer.viser_server.add_gui_folder("Box Settings", expand_by_default=False):
+            self.box_fov = self.viewer.viser_server.add_gui_slider("Box FOV", 0, 360, 1, 60)
+            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 30, 1080, 1, 59)
+            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 30, 1920, 1, 59)
+            self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
+        
+        self.viewer.viser_server.add_gui_button("Show All Points", color="cyan").on_click(lambda _: self._show_density(all_points=True))
+        
+        x_pos, y_pos, z_pos = [0.1427, 0.0359, -0.399]
+        w_q, x_q, y_q, z_q = [-5.18448376e-03, 6.63866888e-04, 6.12021996e-01, 7.90823467e-01]
+        x_e, y_e, z_e = R.from_quat([-5.18448376e-03, 6.63866888e-04, 6.12021996e-01, 7.90823467e-01]).as_euler('xyz', degrees=True)
+        
+        self.box = self.viewer.viser_server.add_box("box", (235, 52, 79), (.1, .25, .1), (w_q, x_q, y_q, z_q), (x_pos, y_pos, z_pos))
         
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
             self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -5, 5, 0.1, 0)
             
-        with self.viewer.viser_server.add_gui_folder("Box Position"):
-            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 1.50)
-            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0.5)
-            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z", -4, 4, 0.01, -3.65)
+        with self.viewer.viser_server.add_gui_folder("Box Position", expand_by_default=False):
+            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, x_pos)
+            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, y_pos)
+            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -4, 4, 0.01, z_pos)
         
         with self.viewer.viser_server.add_gui_folder("Box WXYZ"):
-            self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("X", -180, 180, 0.1, 0)
-            self.box_wxyz_y = self.viewer.viser_server.add_gui_slider("Y", -180, 180, 0.1, 0)
-            self.box_wxyz_z = self.viewer.viser_server.add_gui_slider("Z", -180, 180, 0.1, 0)
+            self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, x_e.item())
+            self.box_wxyz_y = self.viewer.viser_server.add_gui_slider("Rot Y", -180, 180, 0.1, y_e.item())
+            self.box_wxyz_z = self.viewer.viser_server.add_gui_slider("Rot Z", -180, 180, 0.1, z_e.item())
             
         self.box_pos_x.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
         self.box_pos_y.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
         self.box_pos_z.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
 
-        self.threshold_slider.on_update(lambda _: setattr(self, "density_threshold", self.threshold_slider.value))
-        self.box_fov.on_update(lambda _: setattr(self, "FOV", self.box_fov.value))
-        self.box_heigth.on_update(lambda _: setattr(self, "FOV_height", self.box_heigth.value))
-        self.box_width.on_update(lambda _: setattr(self, "FOV_width", self.box_width.value))
-        
         self.box_wxyz_x.on_update(lambda _: self.from_eul_to_quad())
         self.box_wxyz_y.on_update(lambda _: self.from_eul_to_quad())
         self.box_wxyz_z.on_update(lambda _: self.from_eul_to_quad())
         
-        # self.viewer.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
+        self.threshold_slider.on_update(lambda _: setattr(self, "density_threshold", self.threshold_slider.value))
+        self.box_fov.on_update(lambda _: setattr(self, "FOV", self.box_fov.value))
+        self.box_heigth.on_update(lambda _: setattr(self, "FOV_height", self.box_heigth.value))
+        self.box_width.on_update(lambda _: setattr(self, "FOV_width", self.box_width.value))
+        self.box_pa.on_update(lambda _: setattr(self, "pixel_area", self.box_pa.value))
+        
     def from_eul_to_quad(self):
         self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
         
-    def _show_density(self, plot_density: bool = False, FOV: bool = False):
+    def _show_density(self, plot_density: bool = False, FOV: bool = False, all_points: bool = False) -> None:
         """Show the density in the viewer
 
         Args:
             density_location: the density location
         """
         
-                        
-        # Cameras(camera_to_worlds=torch.tensor([[[ 0.2509, -0.9680, -0.0053,  0.1427],
-        #     [ 0.9680,  0.2508,  0.0090,  0.0359],
-        #     [-0.0074, -0.0074,  0.9999, -0.3990]]], device='cuda:0'), fx=torch.tensor([[26.0645]], device='cuda:0'), fy=torch.tensor([[26.0645]], device='cuda:0'), cx=torch.tensor([[37.]], device='cuda:0'), cy=torch.tensor([[20.]], device='cuda:0'), width=torch.tensor([[74]], device='cuda:0'), height=torch.tensor([[40]], device='cuda:0'), distortion_params=None, camera_type=torch.tensor([[1]], device='cuda:0'), times=torch.tensor([[0.]], device='cuda:0'), metadata=None)
-
-        # Cameras(camera_to_worlds=torch.tensor([[[ 0.2509, -0.9680, -0.0053,  0.1427],
-        #  [ 0.9680,  0.2508,  0.0090,  0.0359],
-        #  [-0.0074, -0.0074,  0.9999, -0.3990]]], device='cuda:0'), fx=torch.tensor([[179.1935]], device='cuda:0'), fy=torch.tensor([[179.1935]], device='cuda:0'), cx=torch.tensor([[256.]], device='cuda:0'), cy=torch.tensor([[137.5000]], device='cuda:0'), width=torch.tensor([[512]], device='cuda:0'), height=torch.tensor([[275]], device='cuda:0'), distortion_params=None, camera_type=torch.tensor([[1]], device='cuda:0'), times=torch.tensor([[0.]], device='cuda:0'), metadata=None)
-
-        # Cameras(camera_to_worlds=torch.tensor([[[ 0.2509, -0.9680, -0.0053,  0.1427],
-        #     [ 0.9680,  0.2508,  0.0090,  0.0359],
-        #     [-0.0074, -0.0074,  0.9999, -0.3990]]], device='cuda:0'), fx=torch.tensor([[703.7417]], device='cuda:0'), fy=torch.tensor([[703.7417]], device='cuda:0'), cx=torch.tensor([[960.]], device='cuda:0'), cy=torch.tensor([[540.]], device='cuda:0'), width=torch.tensor([[512]], device='cuda:0'), height=torch.tensor([[275]], device='cuda:0'), distortion_params=None, camera_type=torch.tensor([[1]], device='cuda:0'), times=torch.tensor([[0.]], device='cuda:0'), metadata=None)
-        
-        Debugging.log("Type", ("--------FOV--------" if FOV else "--------box--------"))
-        
         if FOV:
             densities = self.densities
             density_locations = self.density_locations
         else:
-            box_position = self.box.position    
-            euler_angles = [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value]  # Euler-Winkel der Box
+            box_position = self.box.position
+            # quaternion = [self.box.value, self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value]
 
-            # Konvertiere Euler-Winkel in eine Rotationsmatrix
-            rotation_matrix = R.from_euler('xyz', euler_angles, degrees=True).as_matrix()
+            # Konvertiere das Quaternion in eine Rotationsmatrix
+            rotation_matrix = R.from_quat(self.box.wxyz).as_matrix()
             rotation_matrix = torch.tensor(rotation_matrix, device='cuda:0', dtype=torch.float64)
                 
-            # camera_to_worlds = torch.tensor([
-            #     [rotation_matrix[0][0], rotation_matrix[0][1], rotation_matrix[0][2], box_position[0]],
-            #     [rotation_matrix[1][0], rotation_matrix[1][1], rotation_matrix[1][2], box_position[1]],
-            #     [rotation_matrix[2][0], rotation_matrix[2][1], rotation_matrix[2][2], box_position[2]]
-            # ], device='cuda:0', dtype=torch.float32)
             camera_to_worlds = torch.tensor([
-                [ 0.2509, -0.9680, -0.0053,  0.1427],
-                [ 0.9680,  0.2508,  0.0090,  0.0359],
-                [-0.0074, -0.0074,  0.9999, -0.3990]
+                [rotation_matrix[0][0], rotation_matrix[0][1], rotation_matrix[0][2], box_position[0]],
+                [rotation_matrix[1][0], rotation_matrix[1][1], rotation_matrix[1][2], box_position[1]],
+                [rotation_matrix[2][0], rotation_matrix[2][1], rotation_matrix[2][2], box_position[2]]
             ], device='cuda:0', dtype=torch.float32)
+            
+            # test = torch.tensor([
+            #     [ 0.2509, -0.9680, -0.0053,  0.1427],
+            #     [-0.0074, -0.0074,  0.9999, -0.3990]
+            #     [ 0.9680,  0.2508,  0.0090,  0.0359],
+            # ], device='cuda:0', dtype=torch.float32)
 
             import math
             fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
             fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
             
-            print("FOV:", self.FOV)
-            print("FOV_height:", self.FOV_height)
-            print("FOV_width:", self.FOV_width)
-            print("fx:", fx_value)
-            print("fy:", fy_value)
+            # print("FOV:", self.FOV)
+            # print("FOV_height:", self.FOV_height)
+            # print("FOV_width:", self.FOV_width)
+            # print("fx:", fx_value)
+            # print("fy:", fy_value)
             fx = torch.tensor([[fx_value]], device='cuda:0')
             fy = torch.tensor([[fy_value]], device='cuda:0')
             # 512/2
@@ -410,11 +402,35 @@ class RenderStateMachine(threading.Thread):
             )
 
             assert isinstance(camera, Cameras)
-            outputs = self.viewer.get_model().get_outputs_for_camera(camera, obb_box=None)
+            outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
 
             # Extrahiere die Dichtewerte und Dichtepositionen
             densities = outputs["density"]
-            density_locations = outputs["density_locations"]
+            density_locations: torch.Tensor = outputs["density_locations"]
+            
+        if all_points:
+            test_server = viser.ViserServer()
+            
+            filtered_locations = []
+            for ray_locations in density_locations:
+                filtered_locations.append(ray_locations[:1].unsqueeze(0))
+     
+            # point_cloud = o3d.geometry.PointCloud()
+            # point_cloud.points = o3d.utility.Vector3dVector(flattened_locations)
+            # colors = np.array([[1, 0, 0]] * len(flattened_locations))
+            # point_cloud.colors = o3d.utility.Vector3dVector(colors)
+            # o3d.visualization.ViewControl()
+            # o3d.visualization.draw_geometries([point_cloud])
+            origin = camera_to_worlds[:, 3].cpu().numpy()
+            rotation_matrix = camera_to_worlds[:3, :3].cpu().numpy()
+            r = R.from_matrix(rotation_matrix)
+            direction = r.as_quat()
+            
+            test_server.add_box("direction_box", (235, 52, 204), (0.02, 0.3, 0.02), direction, origin)
+            for index, location in enumerate(filtered_locations):
+                self.add_point_as_mesh(location, index, test_server)
+            return
+            
         
         filtered_locations = []
         # filtered_densities = []
@@ -454,20 +470,29 @@ class RenderStateMachine(threading.Thread):
         Debugging.log("filtered_locations", len(filtered_locations))
         
         if plot_density:
+            Debugging.log("c2w", camera_to_worlds)
             import open3d as o3d
             # 3D point cloud visualisieren
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
             colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
             point_cloud.colors = o3d.utility.Vector3dVector(colors)
-            o3d.visualization.ViewControl()
-            o3d.visualization.draw_geometries([point_cloud])
-        else:
-            for index, location in enumerate(filtered_locations):
-                self.add_point_as_mesh(location, index)
-
-    def add_point_as_mesh(self, location, index, scale_factor=10, base_size=0.005, color=(255, 0, 255)):
+            o3d.visualization.ViewControl() # type: ignore
+            o3d.visualization.draw_geometries([point_cloud]) # type: ignore
+        if FOV:
+            origin = camera_to_worlds[:, 3].cpu().numpy()
+            rotation_matrix = camera_to_worlds[:3, :3].cpu().numpy()
+            r = R.from_matrix(rotation_matrix)
+            direction = r.as_quat()
+            Debugging.log("c2w", camera_to_worlds)
             
+            self.viewer.viser_server.add_box("direction_box", (235, 52, 204), (0.02, 0.3, 0.02), direction, origin)
+            # self.mesh_objs.append(obj)
+            for index, location in enumerate(filtered_locations):
+                self.add_point_as_mesh(location, index, self.viewer.viser_server)
+
+    def add_point_as_mesh(self, location, index, server: viser.ViserServer, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
+        print(location)  
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -480,7 +505,7 @@ class RenderStateMachine(threading.Thread):
             [0, 2, 3]
         ])
         mesh_name = f"location_{index}"
-        obj = self.viewer.viser_server.add_mesh_simple(
+        obj = server.add_mesh_simple(
             name=mesh_name,
             vertices=vertices,
             faces=faces,
