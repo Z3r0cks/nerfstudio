@@ -254,8 +254,6 @@ class RenderStateMachine(threading.Thread):
             
             self.densities.extend(outputs["density"])
             self.density_locations.extend(outputs["density_locations"])
-            
-            print("Density Stack Length: ", len(self.densities))
 
             self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
 
@@ -291,7 +289,13 @@ class RenderStateMachine(threading.Thread):
             self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
             self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
-            self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
+            # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
+            
+        with self.viewer.viser_server.add_gui_folder("Camera Options", expand_by_default=False):
+            self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.get_camera_coods("viser_box"))
+            self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.get_camera_coods(""))
+            self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods("box_nerf"))
+            # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
             self.viewer.viser_server.add_gui_button("Create Density", color="green").on_click(lambda _: self._show_density())
@@ -304,13 +308,42 @@ class RenderStateMachine(threading.Thread):
             self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 30, 1920, 1, 59)
             self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
         
-        self.viewer.viser_server.add_gui_button("Show All Points", color="cyan").on_click(lambda _: self._show_density(all_points=True))
+        # self.viewer.viser_server.add_gui_button("Show All Points", color="cyan").on_click(lambda _: self._show_density(all_points=True))
+        # Viser is left handed, nerfstudio is right handed
+        c2w = [[ 9.4743e-01,  3.1997e-01, -3.1997e-07, -7.7472e-03],
+                [-3.1997e-01,  9.4743e-01, -9.4743e-07, -1.0124e-02],
+                [ 4.9808e-18,  1.0000e-06,  1.0000e+00, -0.399]]
         
-        x_pos, y_pos, z_pos = [0.1427, 0.0359, -0.399]
-        w_q, x_q, y_q, z_q = [-5.18448376e-03, 6.63866888e-04, 6.12021996e-01, 7.90823467e-01]
-        x_e, y_e, z_e = R.from_quat([-5.18448376e-03, 6.63866888e-04, 6.12021996e-01, 7.90823467e-01]).as_euler('xyz', degrees=True)
+        c2w_rotated = self.convert_handedness(np.array(c2w))
         
-        self.box = self.viewer.viser_server.add_box("box", (235, 52, 79), (.1, .25, .1), (w_q, x_q, y_q, z_q), (x_pos, y_pos, z_pos))
+        r_matrix_n = [
+            [c2w[0][0], c2w[0][1], c2w[0][2]],
+            [c2w[1][0], c2w[1][1], c2w[1][2]],
+            [c2w[2][0], c2w[2][1], c2w[2][2]]]
+        
+        r_matrix = [
+            [c2w_rotated[0][0], c2w_rotated[0][1], c2w_rotated[0][2]],
+            [c2w_rotated[1][0], c2w_rotated[1][1], c2w_rotated[1][2]],
+            [c2w_rotated[2][0], c2w_rotated[2][1], c2w_rotated[2][2]]]
+        
+
+        x_pos, y_pos, z_pos = [c2w_rotated[0][3], c2w_rotated[1][3], c2w_rotated[2][3]]
+        
+        b_q = R.from_matrix(r_matrix).as_quat()
+        b_q_n = R.from_matrix(r_matrix_n).as_quat()
+        w_q, x_q, y_q, z_q = b_q
+        w_qn, x_qn, y_qn, z_qn = b_q_n
+        x_e, y_e, z_e = R.from_quat(b_q).as_euler('xyz')
+        x_en, y_en, z_en = R.from_quat(b_q_n).as_euler('xyz')
+        
+        Debugging.log("rotated_matrix", r_matrix)
+        Debugging.log("normal_matrix", r_matrix_n)
+        Debugging.log("rotated_b_g", b_q)
+        Debugging.log("normal_b_g_n", b_q_n)
+        Debugging.log("rotated_pos", (x_e, y_e, z_e))
+        Debugging.log("normal_pos", (x_en, y_en, z_en))
+        
+        self.box = self.viewer.viser_server.add_box(name="box", color=(235, 52, 79), dimensions=(.1, .25, .1), wxyz=(w_q, x_q, y_q, z_q), position=(x_pos, y_pos, z_pos))
         
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
             self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -5, 5, 0.1, 0)
@@ -342,6 +375,48 @@ class RenderStateMachine(threading.Thread):
     def from_eul_to_quad(self):
         self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
         
+    def convert_handedness(self, matrix: np.ndarray) -> np.ndarray:
+        """
+        Convert a 4x3 [R|t] matrix from a left-handed (COLMAP/OpenCV) coordinate system 
+        to a right-handed (OpenGL/Blender) coordinate system by applying a 180 degree 
+        rotation around the X-axis.
+
+        Args:
+        - matrix (np.ndarray): A 4x3 matrix representing [R|t] in the left-handed coordinate system.
+
+        Returns:
+        - np.ndarray: A 4x3 matrix representing [R|t] in the right-handed coordinate system.
+        """
+        
+        print(matrix.shape)
+        if matrix.shape != (3, 4):
+            raise ValueError("Input matrix must be of shape 4x3.")
+        
+        # Extract the rotation matrix R (3x3) and translation vector t (3x1)
+        R = matrix[:, :3]
+        t = matrix[:, 3]
+
+        # 180 degree rotation around the X-axis
+        Rx = np.array([
+            [1, 0, 0],
+            [0, -1, 0],
+            [0, 0, -1]
+        ])
+
+        # Apply the rotation to the rotation matrix R
+        R_new = Rx @ R
+
+        # Apply the rotation to the translation vector t
+        t_new = Rx @ t
+
+        # Create the new 3x4 [R|t] matrix
+        matrix_new = np.zeros((3, 4))
+        matrix_new[:, :3] = R_new
+        matrix_new[:, 3] = t_new
+
+        # Return the upper 4x3 part of the resulting 4x4 matrix
+        return matrix_new
+        
     def _show_density(self, plot_density: bool = False, FOV: bool = False, all_points: bool = False) -> None:
         """Show the density in the viewer
 
@@ -357,39 +432,28 @@ class RenderStateMachine(threading.Thread):
             # quaternion = [self.box.value, self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value]
 
             # Konvertiere das Quaternion in eine Rotationsmatrix
-            rotation_matrix = R.from_quat(self.box.wxyz).as_matrix()
-            rotation_matrix = torch.tensor(rotation_matrix, device='cuda:0', dtype=torch.float64)
-                
-            camera_to_worlds = torch.tensor([
-                [rotation_matrix[0][0], rotation_matrix[0][1], rotation_matrix[0][2], box_position[0]],
-                [rotation_matrix[1][0], rotation_matrix[1][1], rotation_matrix[1][2], box_position[1]],
-                [rotation_matrix[2][0], rotation_matrix[2][1], rotation_matrix[2][2], box_position[2]]
-            ], device='cuda:0', dtype=torch.float32)
+            r_matrix = R.from_quat(self.box.wxyz).as_matrix()
+            r_matrix = torch.tensor(r_matrix, device='cuda:0', dtype=torch.float64)
             
-            # test = torch.tensor([
-            #     [ 0.2509, -0.9680, -0.0053,  0.1427],
-            #     [-0.0074, -0.0074,  0.9999, -0.3990]
-            #     [ 0.9680,  0.2508,  0.0090,  0.0359],
-            # ], device='cuda:0', dtype=torch.float32)
+            c2w = [
+                [r_matrix[0][0], r_matrix[0][1], r_matrix[0][2], box_position[0]],
+                [r_matrix[1][0], r_matrix[1][1], r_matrix[1][2], box_position[1]],
+                [r_matrix[2][0], r_matrix[2][1], r_matrix[2][2], box_position[2]]
+            ]
+            
+            c2w_left_handed = torch.tensor(self.convert_handedness(np.array(c2w)), device='cuda:0', dtype=torch.float64)
 
             import math
             fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
             fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
-            
-            # print("FOV:", self.FOV)
-            # print("FOV_height:", self.FOV_height)
-            # print("FOV_width:", self.FOV_width)
-            # print("fx:", fx_value)
-            # print("fy:", fy_value)
+
             fx = torch.tensor([[fx_value]], device='cuda:0')
             fy = torch.tensor([[fy_value]], device='cuda:0')
-            # 512/2
             cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
-            # 275/2
             cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
 
             camera = Cameras(
-                camera_to_worlds=camera_to_worlds,
+                camera_to_worlds=c2w_left_handed,
                 fx=fx,
                 fy=fy,
                 cx=cx,
@@ -408,28 +472,29 @@ class RenderStateMachine(threading.Thread):
             densities = outputs["density"]
             density_locations: torch.Tensor = outputs["density_locations"]
             
-        if all_points:
-            test_server = viser.ViserServer()
+        # if all_points:
+        #     test_server = viser.ViserServer()
             
-            filtered_locations = []
-            for ray_locations in density_locations:
-                filtered_locations.append(ray_locations[:1].unsqueeze(0))
-     
-            # point_cloud = o3d.geometry.PointCloud()
-            # point_cloud.points = o3d.utility.Vector3dVector(flattened_locations)
-            # colors = np.array([[1, 0, 0]] * len(flattened_locations))
-            # point_cloud.colors = o3d.utility.Vector3dVector(colors)
-            # o3d.visualization.ViewControl()
-            # o3d.visualization.draw_geometries([point_cloud])
-            origin = camera_to_worlds[:, 3].cpu().numpy()
-            rotation_matrix = camera_to_worlds[:3, :3].cpu().numpy()
-            r = R.from_matrix(rotation_matrix)
-            direction = r.as_quat()
-            
-            test_server.add_box("direction_box", (235, 52, 204), (0.02, 0.3, 0.02), direction, origin)
-            for index, location in enumerate(filtered_locations):
-                self.add_point_as_mesh(location, index, test_server)
-            return
+        #     filtered_locations = []
+        #     for ray_locations in density_locations:
+        #         filtered_locations.append(ray_locations[0].unsqueeze(0))
+
+        #     filtered_locations = torch.cat(filtered_locations)
+        #     filtered_locations = filtered_locations.cpu().numpy()
+        #     # point_cloud = o3d.geometry.PointCloud()
+        #     # point_cloud.points = o3d.utility.Vector3dVector(flattened_locations)
+        #     # colors = np.array([[1, 0, 0]] * len(flattened_locations))
+        #     # point_cloud.colors = o3d.utility.Vector3dVector(colors)
+        #     # o3d.visualization.ViewControl()
+        #     # o3d.visualization.draw_geometries([point_cloud])
+        #     origin = camera_to_worlds[:, 3].cpu().numpy()
+        #     rotation_matrix = camera_to_worlds[:3, :3].cpu().numpy()
+        #     r = R.from_matrix(rotation_matrix)
+        #     direction = r.as_quat()
+        #     test_server.add_box("direction_box", (235, 52, 204), (0.02, 0.3, 0.02), direction, origin)
+        #     for index, location in enumerate(filtered_locations):
+        #         self.add_point_as_mesh(location, index, test_server)
+        #     return
             
         
         filtered_locations = []
@@ -467,32 +532,33 @@ class RenderStateMachine(threading.Thread):
         remaining_indices = self.filter_nearby_indices(filtered_locations)
         filtered_locations = filtered_locations[remaining_indices]
 
-        Debugging.log("filtered_locations", len(filtered_locations))
         
         if plot_density:
-            Debugging.log("c2w", camera_to_worlds)
+            if not FOV:
+                Debugging.log("c2w", c2w_left_handed)
             import open3d as o3d
             # 3D point cloud visualisieren
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
             colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
             point_cloud.colors = o3d.utility.Vector3dVector(colors)
+            print("Plotting")
             o3d.visualization.ViewControl() # type: ignore
             o3d.visualization.draw_geometries([point_cloud]) # type: ignore
-        if FOV:
-            origin = camera_to_worlds[:, 3].cpu().numpy()
-            rotation_matrix = camera_to_worlds[:3, :3].cpu().numpy()
-            r = R.from_matrix(rotation_matrix)
-            direction = r.as_quat()
-            Debugging.log("c2w", camera_to_worlds)
-            
-            self.viewer.viser_server.add_box("direction_box", (235, 52, 204), (0.02, 0.3, 0.02), direction, origin)
+        else:
+            if not FOV:
+                origin = c2w_left_handed[:, 3].cpu().numpy()
+                rotation_matrix = c2w_left_handed[:3, :3].cpu().numpy()
+                r = R.from_matrix(rotation_matrix)
+                direction = r.as_quat()
+                Debugging.log("c2w", c2w_left_handed)
+                self.viewer.viser_server.add_box("direction_box", (235, 52, 204), (0.02, 0.3, 0.02), direction, origin)
             # self.mesh_objs.append(obj)
+            
             for index, location in enumerate(filtered_locations):
                 self.add_point_as_mesh(location, index, self.viewer.viser_server)
 
     def add_point_as_mesh(self, location, index, server: viser.ViserServer, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
-        print(location)  
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -515,9 +581,33 @@ class RenderStateMachine(threading.Thread):
         )
         self.mesh_objs.append(obj)
         
-    def get_camera_coods(self):
-        Debugging.log("Camera", self.viewer.get_camera_state(self.client))
+    def get_camera_coods(self, type: str):
+        nerf_c2w = self.viewer.get_camera_state(self.client).c2w
+        Debugging.log("Nerf Camera", nerf_c2w)
         
+        clients = self.viewer.viser_server.get_clients()
+        for id, client in clients.items():
+            if type == "viser_box":
+                client.camera.position = self.box.position
+                client.camera.wxyz = self.box.wxyz
+            if type == "box_nerf":
+                matrix = nerf_c2w[:3, :3].cpu().numpy()
+                wxyz = R.from_matrix(matrix).as_quat()
+                self.box.position = (nerf_c2w[0][3].cpu().numpy(), nerf_c2w[1][3].cpu().numpy(), nerf_c2w[2][3].cpu().numpy())
+                self.box.wxyz = wxyz
+            else:
+                self.box.position = client.camera.position
+                self.box.wxyz = client.camera.wxyz
+            # matrix = R.from_quat(client.camera.wxyz).as_matrix()
+            # c2w = [[matrix[0][0], matrix[0][1], matrix[0][2], client.camera.position[0]],
+            #        [matrix[1][0], matrix[1][1], matrix[1][2], client.camera.position[1]],
+            #        [matrix[2][0], matrix[2][1], matrix[2][2], client.camera.position[2]]]
+            # Debugging.log("Viser C2W", c2w)
+            # Debugging.log("Viser Camera wxyz", client.camera.wxyz)
+            # Debugging.log("Viser Camera tposition", client.camera.position)
+            # client.camera.position = (nerf_c2w[0][3].cpu().numpy(), nerf_c2w[1][3].cpu().numpy(), nerf_c2w[2][3].cpu().numpy())
+            # client.camera.wxyz = R.from_matrix(nerf_c2w[:3, :3].cpu().numpy()).as_quat()
+ 
     def delete_point_cloud(self):
         if len(self.mesh_objs) > 0:
             for obj in self.mesh_objs:
