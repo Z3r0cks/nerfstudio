@@ -668,8 +668,6 @@ class Cameras(TensorDataclass):
         directions_stack = torch.empty((3,) + num_rays_shape + (3,), device=self.device)
 
         c2w = self.camera_to_worlds[true_indices]
-        print("c2w.shape",c2w.shape)
-        print("num_rays_shape", num_rays_shape)
         assert c2w.shape == num_rays_shape + (3, 4)
 
         def _compute_rays_for_omnidirectional_stereo(
