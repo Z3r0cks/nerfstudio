@@ -303,16 +303,18 @@ class NerfactoModel(Model):
         return callbacks
 
     def get_outputs(self, ray_bundle: RayBundle):
+        all_densities = []
+        all_densities_locations = []
         # apply the camera optimizer pose tweaks
         if self.training:
             self.camera_optimizer.apply_to_raybundle(ray_bundle)
         ray_samples: RaySamples
         ray_samples, weights_list, ray_samples_list = self.proposal_sampler(ray_bundle, density_fns=self.density_fns)
-        field_outputs, density_locations = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
-        # print("33, get_outputs(nerfacto):  self._sample_locations: ", density_locations.shape)
+        field_outputs, densities_locations = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
         if self.config.use_gradient_scaling:
             field_outputs = scale_gradients_by_distance_squared(field_outputs, ray_samples)
-
+        # all_densities.append(field_outputs[FieldHeadNames.DENSITY])
+        # all_densities_locations.append(density_locations)
         weights = ray_samples.get_weights(field_outputs[FieldHeadNames.DENSITY])
         weights_list.append(weights)
         ray_samples_list.append(ray_samples)
@@ -329,8 +331,8 @@ class NerfactoModel(Model):
             "depth": depth,
             "expected_depth": expected_depth,
             "weights": weights,
-            "density": field_outputs[FieldHeadNames.DENSITY],
-            "density_locations": density_locations,
+            "densities": field_outputs[FieldHeadNames.DENSITY],
+            "densities_locations": densities_locations,
         }
         if self.config.predict_normals:
             normals = self.renderer_normals(normals=field_outputs[FieldHeadNames.NORMALS], weights=weights)
@@ -356,6 +358,8 @@ class NerfactoModel(Model):
         for i in range(self.config.num_proposal_iterations):
             outputs[f"prop_depth_{i}"] = self.renderer_depth(weights=weights_list[i], ray_samples=ray_samples_list[i])
             
+        print("3: nerfacto, density", outputs["densities"].shape)
+        print("3: nerfacto, position",  outputs["densities_locations"].shape)
         return outputs
 
     def get_metrics_dict(self, outputs, batch):

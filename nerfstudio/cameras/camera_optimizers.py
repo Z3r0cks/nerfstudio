@@ -151,8 +151,8 @@ class CameraOptimizer(nn.Module):
             raybundle.origins = raybundle.origins + correction_matrices[:, :3, 3]
             try:
                 raybundle.directions = torch.bmm(correction_matrices[:, :3, :3], raybundle.directions[..., None]).squeeze()
-            except RuntimeError:
-                print(RuntimeError.args)
+            except :
+                print("camera_optimizer.py: apply_to_raybundle: 147")
                 
     def apply_to_camera(self, camera: Cameras) -> None:
         """Apply the pose correction to the raybundle"""

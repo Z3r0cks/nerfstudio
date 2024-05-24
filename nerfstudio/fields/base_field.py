@@ -129,10 +129,12 @@ class Field(nn.Module):
             
         from nerfstudio.utils.debugging import Debugging
         
-        # Debugging.log("2: nerfacto_field.py, get_density", density.shape)
+        print("2: Base_field, get_density", density.shape)
+        print("2: Base_field, get_density", density_locations.shape)
 
         field_outputs = self.get_outputs(ray_samples, density_embedding=density_embedding)
         field_outputs[FieldHeadNames.DENSITY] = density  # type: ignore
+        
         if compute_normals:
             with torch.enable_grad():
                 normals = self.get_normals()

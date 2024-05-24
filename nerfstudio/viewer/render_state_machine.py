@@ -106,7 +106,7 @@ class RenderStateMachine(threading.Thread):
         self.FOV_height = 59
         self.pixel_area = 1
         self.mesh_objs = []
-        self.viewer.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())
+        self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
         
         self.densities = []
         self.density_locations = []
@@ -254,8 +254,8 @@ class RenderStateMachine(threading.Thread):
                 # if we got interrupted, don't send the output to the viewer
                 continue
             
-            self.densities.extend(outputs["density"])
-            self.density_locations.extend(outputs["density_locations"])
+            self.densities.extend(outputs["densities"])
+            self.density_locations.extend(outputs["densities_locations"])
 
             self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
 
@@ -293,10 +293,10 @@ class RenderStateMachine(threading.Thread):
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
             # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
             
-        with self.viewer.viser_server.add_gui_folder("Camera Options", expand_by_default=False):
+        with self.viewer.viser_server.add_gui_folder("Camera Options"):
             self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.get_camera_coods("viser_box"))
             self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.get_camera_coods(""))
-            self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods("box_nerf"))
+            # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods("box_nerf"))
             # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
@@ -304,10 +304,10 @@ class RenderStateMachine(threading.Thread):
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
             self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
             
-        with self.viewer.viser_server.add_gui_folder("Box Settings", expand_by_default=False):
+        with self.viewer.viser_server.add_gui_folder("Density Settings"):
             self.box_fov = self.viewer.viser_server.add_gui_slider("Box FOV", 0, 360, 1, 60)
-            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 30, 1080, 1, 59)
-            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 30, 1920, 1, 59)
+            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 30, 1080, 1, 100)
+            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 30, 1920, 1, 100)
             self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
 
         
@@ -315,9 +315,9 @@ class RenderStateMachine(threading.Thread):
         # self.box_front = self.viewer.viser_server.add_box(name="box_front", color=(155, 155, 0), dimensions=(.25, .25, .005), wxyz=(0, 0, 0, 0), position=(0, 0, 0.1))
         
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
-            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -5, 5, 0.1, 0)
+            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -10, 10, 0.1, 0)
             
-        with self.viewer.viser_server.add_gui_folder("Box Position", expand_by_default=False):
+        with self.viewer.viser_server.add_gui_folder("Box Position"):
             self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 0)
             self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0)
             self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -4, 4, 0.01, 0)
@@ -351,14 +351,13 @@ class RenderStateMachine(threading.Thread):
             density_location: the density location
         """
         
+        print("------------------------------------------------")
+        
         if FOV:
-            densities = self.densities
-            density_locations = self.density_locations # type: ignore
+            print("test")
+            # densities = self.densities
+            # density_locations = self.density_locations # type: ignore
         else:
-            box_position = self.box.position
-            # quaternion = [self.box.value, self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value]
-
-            # Konvertiere das Quaternion in eine Rotationsmatrix
             import viser.transforms as vtf
             Rv = vtf.SO3(wxyz=self.box.wxyz)
             Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
@@ -392,23 +391,26 @@ class RenderStateMachine(threading.Thread):
             outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
 
             # Extrahiere die Dichtewerte und Dichtepositionen
-            densities = outputs["density"]
-            density_locations: torch.Tensor = outputs["density_locations"]
-
+            all_densities = []
+            all_density_locations = []
             
-        
+        for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
+            all_densities.append(densities)
+            all_density_locations.append(locations) 
+
+
         filtered_locations = []
         # filtered_densities = []
         # last_ray_point = []
 
         # Berechne globalen Mittelwert und Standardabweichung über alle Dichtewerte
-        all_densities = torch.cat([ray_densities for ray_densities in densities if ray_densities.numel() > 0])
+        all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
+        all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
 
-        
         global_mean = torch.mean(all_densities)
         global_std = torch.std(all_densities)
 
-        for ray_locations, ray_densities in zip(density_locations, densities):
+        for ray_locations, ray_densities in zip(all_density_locations, all_densities):
             if ray_densities.numel() == 0:
                 continue
 
@@ -419,10 +421,11 @@ class RenderStateMachine(threading.Thread):
             if torch.any(mask):
                 first_index = torch.where(mask)[0][0]
                 filtered_locations.append(ray_locations[first_index].unsqueeze(0))
+
                 # filtered_densities.append(ray_densities[first_index].unsqueeze(0))
             else:
                 pass
-        Debugging.log("filtered_locations", filtered_locations)
+        # Debugging.log("filtered_locations", filtered_locations)
         filtered_locations = torch.cat(filtered_locations)
         # # filtered_densities = torch.cat(filtered_densities)
         
@@ -433,14 +436,16 @@ class RenderStateMachine(threading.Thread):
         filtered_locations = filtered_locations[remaining_indices]
 
         
+        Debugging.log("densities_locations_filtert", filtered_locations.shape)
+        
         if plot_density:
+            print("Plotting")
             import open3d as o3d
             # 3D point cloud visualisieren
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
             colors = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
             point_cloud.colors = o3d.utility.Vector3dVector(colors)
-            print("Plotting")
             o3d.visualization.ViewControl() # type: ignore
             o3d.visualization.draw_geometries([point_cloud]) # type: ignore
             
@@ -473,18 +478,18 @@ class RenderStateMachine(threading.Thread):
         
     def get_camera_coods(self, type: str):
         
-        nerf_c2w = self.viewer.get_camera_state(self.client).c2w
+        # nerf_c2w = self.viewer.get_camera_state(self.client).c2w
         
         clients = self.viewer.viser_server.get_clients()
         for id, client in clients.items():
             if type == "viser_box":
                 client.camera.position = self.box.position
                 client.camera.wxyz = self.box.wxyz
-            if type == "box_nerf":
-                matrix = nerf_c2w[:3, :3].cpu().numpy()
-                wxyz = R.from_matrix(matrix).as_quat()
-                self.box.position = (nerf_c2w[0][3].cpu().numpy(), nerf_c2w[1][3].cpu().numpy(), nerf_c2w[2][3].cpu().numpy())
-                self.box.wxyz = wxyz
+            # if type == "box_nerf":
+            #     matrix = nerf_c2w[:3, :3].cpu().numpy()
+            #     wxyz = R.from_matrix(matrix).as_quat()
+            #     self.box.position = (nerf_c2w[0][3].cpu().numpy(), nerf_c2w[1][3].cpu().numpy(), nerf_c2w[2][3].cpu().numpy())
+            #     self.box.wxyz = wxyz
             else:
                 self.box.position = client.camera.position
                 self.box.wxyz = client.camera.wxyz

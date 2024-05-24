@@ -221,15 +221,15 @@ class NerfactoField(Field):
             self._sample_locations.requires_grad = True
         positions_flat = positions.view(-1, 3)
         h = self.mlp_base(positions_flat).view(*ray_samples.frustums.shape, -1)
-        Debugging.log("h", h)
         density_before_activation, base_mlp_out = torch.split(h, [1, self.geo_feat_dim], dim=-1)
         self._density_before_activation = density_before_activation
-        # Debugging.log(".average_init_density", self.average_init_density)
         # Rectifying the density with an exponential is much more stable than a ReLU or
         # softplus, because it enables high post-activation (float32) density outputs
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
+        print("1: nerfacto_field, density", density.shape)
+        print("1: nerfacto_field, position", ray_samples.frustums.get_positions().shape)
         return density, base_mlp_out, ray_samples.frustums.get_positions()
     # --------------------------------------------------------------------------------------------   
     def get_sample_loaction(self):

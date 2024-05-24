@@ -181,8 +181,14 @@ class Model(nn.Module):
             shape = [kwargs.get("width"), kwargs.get("height"), 1]
             pixel_area = torch.full(shape, int(kwargs.get("pixel_area") or 1), dtype=torch.float32)
             ray.pixel_area = pixel_area
-            db.log("num_ray", len(ray))
-            return self.get_outputs_for_camera_ray_bundle(ray)
+            
+            test = self.get_outputs_for_camera_ray_bundle(ray)
+            
+            for densities, locations in zip(test["densities"], test["densities_locations"]):
+                print("5: base_model, density", densities.shape)
+                print("5: base_model, position",  locations.shape)
+            
+            return test
         
     @torch.no_grad()
     def get_outputs_for_camera_ray_bundle(self, camera_ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:
@@ -203,8 +209,8 @@ class Model(nn.Module):
             # move the chunk inputs to the model device
             ray_bundle = ray_bundle.to(self.device)
             outputs = self.forward(ray_bundle=ray_bundle)
-            density_locations = outputs["density_locations"]
-            density = outputs["density"]
+            densities_locations = outputs["densities_locations"]
+            densities = outputs["densities"]
             for output_name, output in outputs.items():  # type: ignore
                 if not isinstance(output, torch.Tensor):
                     # TODO: handle lists of tensors as well
@@ -214,8 +220,12 @@ class Model(nn.Module):
         outputs = {}
         for output_name, outputs_list in outputs_lists.items():
             outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
-        outputs["density_locations"] = density_locations
-        outputs["density"] = density
+        outputs["densities_locations"] = outputs_lists["densities_locations"]
+        outputs["densities"] = outputs_lists["densities"]
+        # print("outputs_lists", outputs_lists)
+        for densities, positions in zip(outputs["densities"], outputs["densities_locations"]):
+            print("4: base_model, density", densities.shape)
+            print("4: base_model, position", positions.shape)
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:
