@@ -229,7 +229,7 @@ class NerfactoField(Field):
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
         print("1: nerfacto_field, density", density.shape)
-        print("1: nerfacto_field, position", ray_samples.frustums.get_positions().shape)
+        # print("1: nerfacto_field, position", ray_samples.frustums.get_positions().shape)
         return density, base_mlp_out, ray_samples.frustums.get_positions()
     # --------------------------------------------------------------------------------------------   
     def get_sample_loaction(self):

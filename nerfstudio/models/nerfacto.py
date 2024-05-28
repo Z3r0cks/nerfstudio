@@ -358,8 +358,8 @@ class NerfactoModel(Model):
         for i in range(self.config.num_proposal_iterations):
             outputs[f"prop_depth_{i}"] = self.renderer_depth(weights=weights_list[i], ray_samples=ray_samples_list[i])
             
-        print("3: nerfacto, density", outputs["densities"].shape)
-        print("3: nerfacto, position",  outputs["densities_locations"].shape)
+        # print("3: nerfacto, density", outputs["densities"].shape)
+        # print("3: nerfacto, position",  outputs["densities_locations"].shape)
         return outputs
 
     def get_metrics_dict(self, outputs, batch):

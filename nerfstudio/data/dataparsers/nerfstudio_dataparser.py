@@ -167,6 +167,7 @@ class Nerfstudio(DataParser):
                 )
 
             image_filenames.append(fname)
+            from nerfstudio.utils.debugging import Debugging as db
             poses.append(np.array(frame["transform_matrix"]))
             if "mask_path" in frame:
                 mask_filepath = Path(frame["mask_path"])
@@ -233,15 +234,19 @@ class Nerfstudio(DataParser):
         else:
             orientation_method = self.config.orientation_method
 
+        db.log("orientation_method", orientation_method)
+        db.log("center_method", self.config.center_method)
         poses = torch.from_numpy(np.array(poses).astype(np.float32))
         poses, transform_matrix = camera_utils.auto_orient_and_center_poses(
             poses,
             method=orientation_method,
             center_method=self.config.center_method,
         )
-
+        db.log("transform_matrix", transform_matrix)
+        db.log("poses", poses)
         # Scale poses
         scale_factor = 1.0
+
         if self.config.auto_scale_poses:
             scale_factor /= float(torch.max(torch.abs(poses[:, :3, 3])))
         scale_factor *= self.config.scale_factor

@@ -182,13 +182,13 @@ class Model(nn.Module):
             pixel_area = torch.full(shape, int(kwargs.get("pixel_area") or 1), dtype=torch.float32)
             ray.pixel_area = pixel_area
             
-            test = self.get_outputs_for_camera_ray_bundle(ray)
+            # test = self.get_outputs_for_camera_ray_bundle(ray)
             
-            for densities, locations in zip(test["densities"], test["densities_locations"]):
-                print("5: base_model, density", densities.shape)
-                print("5: base_model, position",  locations.shape)
+            # for densities, locations in zip(test["densities"], test["densities_locations"]):
+                # print("5: base_model, density", densities.shape)
+                # print("5: base_model, position",  locations.shape)
             
-            return test
+            return self.get_outputs_for_camera_ray_bundle(ray)
         
     @torch.no_grad()
     def get_outputs_for_camera_ray_bundle(self, camera_ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:
@@ -223,9 +223,9 @@ class Model(nn.Module):
         outputs["densities_locations"] = outputs_lists["densities_locations"]
         outputs["densities"] = outputs_lists["densities"]
         # print("outputs_lists", outputs_lists)
-        for densities, positions in zip(outputs["densities"], outputs["densities_locations"]):
-            print("4: base_model, density", densities.shape)
-            print("4: base_model, position", positions.shape)
+        # for densities, positions in zip(outputs["densities"], outputs["densities_locations"]):
+            # print("4: base_model, density", densities.shape)
+            # print("4: base_model, position", positions.shape)
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:

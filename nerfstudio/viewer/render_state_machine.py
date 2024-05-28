@@ -108,12 +108,12 @@ class RenderStateMachine(threading.Thread):
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
         
-        self.densities = []
-        self.density_locations = []
+        # self.densities = []
+        # self.density_locations = []
     
-    def void_id(self):
-        self.densities = []
-        self.density_locations = []
+    # def void_id(self):
+    #     self.densities = []
+    #     self.density_locations = []
         
     def action(self, action: RenderAction):
         """Takes an action and updates the state machine
@@ -254,8 +254,8 @@ class RenderStateMachine(threading.Thread):
                 # if we got interrupted, don't send the output to the viewer
                 continue
             
-            self.densities.extend(outputs["densities"])
-            self.density_locations.extend(outputs["densities_locations"])
+            # self.densities.extend(outputs["densities"])
+            # self.density_locations.extend(outputs["densities_locations"])
 
             self._send_output_to_viewer(outputs, static_render=(action.action in ["static", "step"]))
 
@@ -287,10 +287,10 @@ class RenderStateMachine(threading.Thread):
     
     def add_gui(self) -> None:
         
-        with self.viewer.viser_server.add_gui_folder("Density Options FOV", expand_by_default=False):
-            self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
-            self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
-            self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
+        # with self.viewer.viser_server.add_gui_folder("Density Options FOV", expand_by_default=False):
+        #     self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
+        #     # self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
+        #     self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
             # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Camera Options"):
