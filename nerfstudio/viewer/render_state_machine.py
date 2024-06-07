@@ -344,6 +344,16 @@ class RenderStateMachine(threading.Thread):
         self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
         self.box.position = (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)
         
+    def calculate_transmittance(self, densities):
+        """Calculate the transmittance from the densities
+
+        Args:
+            densities: the densities
+        Returns:
+            transimttance: the transmittance """
+        
+        print("test")
+        
     def _show_density(self, plot_density: bool = False, FOV: bool = False, all_points: bool = False) -> None:
         """Show the density in the viewer
 
@@ -353,8 +363,9 @@ class RenderStateMachine(threading.Thread):
         
         print("------------------------------------------------")
         
+        
         if FOV:
-            print("test")
+            print("FOV")
             # densities = self.densities
             # density_locations = self.density_locations # type: ignore
         else:
@@ -448,33 +459,38 @@ class RenderStateMachine(threading.Thread):
             point_cloud.colors = o3d.utility.Vector3dVector(colors)
             o3d.visualization.ViewControl() # type: ignore
             o3d.visualization.draw_geometries([point_cloud]) # type: ignore
-            
+        
+        
         else:
-            for index, location in enumerate(filtered_locations):
-                self.add_point_as_mesh(location, index, self.viewer.viser_server)
+             
+            obj = self.viewer.viser_server.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.01, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
+            self.mesh_objs.append(obj)
+            
+            # for index, location in enumerate(filtered_locations):
+            #     self.add_point_as_mesh(location, index, self.viewer.viser_server)
 
-    def add_point_as_mesh(self, location, index, server: viser.ViserServer, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
-        half_size = base_size / 2 * scale_factor 
-        vertices = np.array([
-            [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
-            [location[0] * scale_factor + half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
-            [location[0] * scale_factor + half_size, location[1] * scale_factor + half_size, location[2] * scale_factor],
-            [location[0] * scale_factor - half_size, location[1] * scale_factor + half_size, location[2] * scale_factor]
-        ])
-        faces = np.array([
-            [0, 1, 2],
-            [0, 2, 3]
-        ])
-        mesh_name = f"location_{index}"
-        obj = server.add_mesh_simple(
-            name=mesh_name,
-            vertices=vertices,
-            faces=faces,
-            color=color,
-            position=(0, 0, 0),  # position bereits in vertices definiert
-            visible=True,
-        )
-        self.mesh_objs.append(obj)
+    # def add_point_as_mesh(self, location, index, server: viser.ViserServer, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
+    #     half_size = base_size / 2 * scale_factor 
+    #     vertices = np.array([
+    #         [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
+    #         [location[0] * scale_factor + half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
+    #         [location[0] * scale_factor + half_size, location[1] * scale_factor + half_size, location[2] * scale_factor],
+    #         [location[0] * scale_factor - half_size, location[1] * scale_factor + half_size, location[2] * scale_factor]
+    #     ])
+    #     faces = np.array([
+    #         [0, 1, 2],
+    #         [0, 2, 3]
+    #     ])
+    #     mesh_name = f"location_{index}"
+    #     obj = server.add_mesh_simple(
+    #         name=mesh_name,
+    #         vertices=vertices,
+    #         faces=faces,
+    #         color=color,
+    #         position=(0, 0, 0),  # position bereits in vertices definiert
+    #         visible=True,
+    #     )
+    #     self.mesh_objs.append(obj)
         
     def get_camera_coods(self, type: str):
         

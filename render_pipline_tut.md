@@ -117,3 +117,6 @@ image_width 512
 | `camera_type`       | CameraType.PERSPECTIVE                                                                                                         |
 | `times`             | time of the camera state. 0.0                                                                                                  |
 | `metadata`          | None                                                                                                                           |
+
+
+Positions will be genrated in nerfacto.py with: ray_samples, weights_list, ray_samples_list = self.proposal_sampler(ray_bundle, density_fns=self.density_fns). Its the proposal sampler of the nerfacto model.

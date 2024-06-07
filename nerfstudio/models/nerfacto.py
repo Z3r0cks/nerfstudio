@@ -216,10 +216,11 @@ class NerfactoModel(Model):
         initial_sampler = None  # None is for piecewise as default (see ProposalNetworkSampler)
         if self.config.proposal_initial_sampler == "uniform":
             initial_sampler = UniformSampler(single_jitter=self.config.use_single_jitter)
-
         self.proposal_sampler = ProposalNetworkSampler(
             num_nerf_samples_per_ray=self.config.num_nerf_samples_per_ray,
+            # num_nerf_samples_per_ray=128,
             num_proposal_samples_per_ray=self.config.num_proposal_samples_per_ray,
+            # num_proposal_samples_per_ray=(512, 96),
             num_proposal_network_iterations=self.config.num_proposal_iterations,
             single_jitter=self.config.use_single_jitter,
             update_sched=update_schedule,
@@ -242,6 +243,7 @@ class NerfactoModel(Model):
         # losses
         self.rgb_loss = MSELoss()
         self.step = 0
+        
         # metrics
         from torchmetrics.functional import structural_similarity_index_measure
         from torchmetrics.image import PeakSignalNoiseRatio
@@ -303,13 +305,12 @@ class NerfactoModel(Model):
         return callbacks
 
     def get_outputs(self, ray_bundle: RayBundle):
-        all_densities = []
-        all_densities_locations = []
         # apply the camera optimizer pose tweaks
         if self.training:
             self.camera_optimizer.apply_to_raybundle(ray_bundle)
         ray_samples: RaySamples
         ray_samples, weights_list, ray_samples_list = self.proposal_sampler(ray_bundle, density_fns=self.density_fns)
+        # print("positions", ray_samples.frustums.get_positions().shape)
         field_outputs, densities_locations = self.field.forward(ray_samples, compute_normals=self.config.predict_normals)
         if self.config.use_gradient_scaling:
             field_outputs = scale_gradients_by_distance_squared(field_outputs, ray_samples)
@@ -356,8 +357,7 @@ class NerfactoModel(Model):
             )
 
         for i in range(self.config.num_proposal_iterations):
-            outputs[f"prop_depth_{i}"] = self.renderer_depth(weights=weights_list[i], ray_samples=ray_samples_list[i])
-            
+            outputs[f"prop_depth_{i}"] = self.renderer_depth(weights=weights_list[i], ray_samples=ray_samples_list[i])  
         # print("3: nerfacto, density", outputs["densities"].shape)
         # print("3: nerfacto, position",  outputs["densities_locations"].shape)
         return outputs

@@ -181,13 +181,6 @@ class Model(nn.Module):
             shape = [kwargs.get("width"), kwargs.get("height"), 1]
             pixel_area = torch.full(shape, int(kwargs.get("pixel_area") or 1), dtype=torch.float32)
             ray.pixel_area = pixel_area
-            
-            # test = self.get_outputs_for_camera_ray_bundle(ray)
-            
-            # for densities, locations in zip(test["densities"], test["densities_locations"]):
-                # print("5: base_model, density", densities.shape)
-                # print("5: base_model, position",  locations.shape)
-            
             return self.get_outputs_for_camera_ray_bundle(ray)
         
     @torch.no_grad()
