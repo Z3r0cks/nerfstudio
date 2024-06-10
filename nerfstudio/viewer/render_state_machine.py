@@ -102,8 +102,8 @@ class RenderStateMachine(threading.Thread):
         #-------------------------------------------------------------
         self.density_threshold = 0
         self.FOV = 60
-        self.FOV_width = 59
-        self.FOV_height = 59
+        self.FOV_width = 50
+        self.FOV_height = 50
         self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
@@ -294,32 +294,32 @@ class RenderStateMachine(threading.Thread):
             # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Camera Options"):
-            self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.get_camera_coods("viser_box"))
-            self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.get_camera_coods(""))
+            self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.set_camera_box("viser_box"))
+            self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.set_camera_box(""))
             # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods("box_nerf"))
             # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
-            self.viewer.viser_server.add_gui_button("Create Density", color="green").on_click(lambda _: self._show_density())
+            self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
+            self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
             self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
             
         with self.viewer.viser_server.add_gui_folder("Density Settings"):
             self.box_fov = self.viewer.viser_server.add_gui_slider("Box FOV", 0, 360, 1, 60)
-            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 30, 1080, 1, 100)
-            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 30, 1920, 1, 100)
+            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 1, 1080, 1, 50)
+            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 1, 1920, 1, 50)
             self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
 
         
         self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=100.0, aspect=1, scale=0.1 ,color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(0, 0, 0))
-        # self.box_front = self.viewer.viser_server.add_box(name="box_front", color=(155, 155, 0), dimensions=(.25, .25, .005), wxyz=(0, 0, 0, 0), position=(0, 0, 0.1))
-        
+        # th_va= 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
-            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -10, 10, 0.1, 0)
+            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", 0, 1, 0.001, 0)
             
         with self.viewer.viser_server.add_gui_folder("Box Position"):
-            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 0)
-            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0)
+            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 0)
+            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 0)
             self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -4, 4, 0.01, 0)
         
         with self.viewer.viser_server.add_gui_folder("Box WXYZ"):
@@ -354,7 +354,7 @@ class RenderStateMachine(threading.Thread):
         
         print("test")
         
-    def _show_density(self, plot_density: bool = False, FOV: bool = False, all_points: bool = False) -> None:
+    def _show_density(self, plot_density: bool = False, FOV: bool = False, clickable: bool = False) -> None:
         """Show the density in the viewer
 
         Args:
@@ -373,8 +373,8 @@ class RenderStateMachine(threading.Thread):
             Rv = vtf.SO3(wxyz=self.box.wxyz)
             Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
             Rv = torch.tensor(Rv.as_matrix())
-            pos = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
-            c2w = torch.concatenate([Rv, pos[:, None]], dim=1)
+            origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+            c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
             
             import math
             fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
@@ -408,11 +408,10 @@ class RenderStateMachine(threading.Thread):
         for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
             all_densities.append(densities)
             all_density_locations.append(locations) 
+            
 
-
+        # filtered_locations = torch.tensor([])
         filtered_locations = []
-        # filtered_densities = []
-        # last_ray_point = []
 
         # Berechne globalen Mittelwert und Standardabweichung über alle Dichtewerte
         all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
@@ -436,8 +435,18 @@ class RenderStateMachine(threading.Thread):
                 # filtered_densities.append(ray_densities[first_index].unsqueeze(0))
             else:
                 pass
-        # Debugging.log("filtered_locations", filtered_locations)
+        
         filtered_locations = torch.cat(filtered_locations)
+        
+        # #calculate the transmittance points for each point to get the opacity
+        # for ray_locations, ray_densities in zip(all_density_locations[0], all_densities[0]):
+        #     distances = [self.compute_distance(origin, location) for location in ray_locations]
+        #     t_point = self.find_threshold_point(ray_densities, distances)
+        #     # Debugging.log("t_point", t_point)
+        #     if(t_point != -1):
+        #         filtered_locations = torch.cat([filtered_locations, ray_locations[t_point].unsqueeze(0)])
+     
+
         # # filtered_densities = torch.cat(filtered_densities)
         
         filtered_locations = filtered_locations.cpu().numpy()
@@ -460,55 +469,146 @@ class RenderStateMachine(threading.Thread):
             o3d.visualization.ViewControl() # type: ignore
             o3d.visualization.draw_geometries([point_cloud]) # type: ignore
         
-        
-        else:
-             
+        if not plot_density and not clickable:
+            if len(self.mesh_objs) > 0:
+                self.delete_point_cloud()
+                
             obj = self.viewer.viser_server.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.01, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
             self.mesh_objs.append(obj)
             
-            # for index, location in enumerate(filtered_locations):
-            #     self.add_point_as_mesh(location, index, self.viewer.viser_server)
+        if clickable:
+            if len(self.mesh_objs) > 0:
+                self.delete_point_cloud()
+                
+            for index, location in enumerate(filtered_locations):
+                self.add_point_as_mesh(location, index)
+        
+    def add_point_as_mesh(self, location, index, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
+        half_size = base_size / 2 * scale_factor 
+        vertices = np.array([
+            [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
+            [location[0] * scale_factor + half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
+            [location[0] * scale_factor + half_size, location[1] * scale_factor + half_size, location[2] * scale_factor],
+            [location[0] * scale_factor - half_size, location[1] * scale_factor + half_size, location[2] * scale_factor]
+        ])
+        faces = np.array([
+            [0, 1, 2],
+            [0, 2, 3]
+        ])
+        mesh_name = f"location_{index}"
+        obj = self.viewer.viser_server.add_mesh_simple(
+            name=mesh_name,
+            vertices=vertices,
+            faces=faces,
+            color=color,
+            position=(0, 0, 0),  # position bereits in vertices definiert
+            visible=True,
+        )
+        obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO))
+        
+        self.mesh_objs.append(obj)
+        
+    def add_distance_modal(self, point):
+        """ 
+        add a modal to show the distance of a point
+        point: point
+        """
+        
+        distance = self.compute_distance(self.box.position, point)
+        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {distance:.2f} m", (1, 0, 0, 0), self.box.position)
+        # distance_label.label_size = 0.1
+        # distance_ray = self.viewer.viser_server.add_gui_modal("Distance")
+        point3 = self.box.position + (point - self.box.position) * 0.001
+        vertices = np.array([self.box.position, point, point3])
+        faces = np.array([[0, 1, 2]])
+        distance_ray = self.viewer.viser_server.add_mesh_simple(
+            name="line_mesh",
+            vertices=vertices,
+            faces=faces,
+            color=(155, 0, 0),
+            wireframe=True,  # Da es nur eine Linie ist, wireframe auf True setzen
+            opacity=None,
+            material='standard',
+            flat_shading=False,
+            side='double',
+            wxyz=(1.0, 0.0, 0.0, 0.0),
+            position=(0.0, 0.0, 0.0),
+            visible=True
+        )
+        distance_ray.on_click(lambda _: distance_ray.remove())
+        # print("Distance: ", distance)
+        # with modal:
+        #     self.viewer.viser_server.add_gui_markdown(f"Distance: {distance:.2f} m")
+        #     # frame_origin = self.viewer.viser_server.add_frame("origin_frame", True, position=self.box.position, axes_length=0.3, axes_radius=0.01)
+        #     # frame_target = self.viewer.viser_server.add_frame("frame_target", True, position=point, axes_length=0.3, axes_radius=0.01)
+        #     # frame_origin.on_click(lambda _: frame_origin.remove())
+        #     # frame_target.on_click(lambda _: frame_target.remove())
+        #     self.viewer.viser_server.add_gui_button("Close").on_click(lambda _: modal.close())
+        
+    def compute_distance(self, a, b):
+        """ 
+        computes the distance between two points
+        a: point a
+        b: point b
+        returns: distance
+        """
+        print("origin", a)
+        print("Point", b)
+        return (np.linalg.norm(np.array(a) - np.array(b)))
+    
+    def compute_opacity(self, density, distance):
+        """ 
+        computes the opacity for each point along the ray    
+        returns: alpha (opacity)
+        """
+        alpha = 1 - np.exp(-np.array(density) * np.array(distance))
+        return alpha
+    
+    def find_threshold_point(self, densities, distances):
+        """ 
+        find the point where the transmittance falls below a threshold
+        threshold: threshold value for transmittance (default: 0.01)
+        returns: index of the point where the transmittance falls below the threshold. If no point falls below the threshold, the last index is returned.
+        """
 
-    # def add_point_as_mesh(self, location, index, server: viser.ViserServer, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
-    #     half_size = base_size / 2 * scale_factor 
-    #     vertices = np.array([
-    #         [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
-    #         [location[0] * scale_factor + half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
-    #         [location[0] * scale_factor + half_size, location[1] * scale_factor + half_size, location[2] * scale_factor],
-    #         [location[0] * scale_factor - half_size, location[1] * scale_factor + half_size, location[2] * scale_factor]
-    #     ])
-    #     faces = np.array([
-    #         [0, 1, 2],
-    #         [0, 2, 3]
-    #     ])
-    #     mesh_name = f"location_{index}"
-    #     obj = server.add_mesh_simple(
-    #         name=mesh_name,
-    #         vertices=vertices,
-    #         faces=faces,
-    #         color=color,
-    #         position=(0, 0, 0),  # position bereits in vertices definiert
-    #         visible=True,
-    #     )
-    #     self.mesh_objs.append(obj)
+        alpha = self.compute_opacity(densities, distances)
+        T = self.compute_transmission(alpha)
+        for i, T_i in enumerate(T):
+            if np.all(T_i < self.threshold_slider.value):
+                return i
+    
+        return -1  # no point: return last index
         
-    def get_camera_coods(self, type: str):
-        
-        # nerf_c2w = self.viewer.get_camera_state(self.client).c2w
+    def compute_transmission(self, alpha):
+        """ 
+        computes the transmission for each point along the ray 
+        alpha: opacity
+        return: T (transmission)
+        """
+        T = [1.0]  # init with 1 for the first point
+        for i in range(1, len(alpha)):
+            T_i = T[-1] * (1 - alpha[i-1])  # T[i] = T[i-1] * (1 - alpha[i-1])
+            T.append(T_i)
+        return T
+    
+    def set_camera_box(self, type: str):
         
         clients = self.viewer.viser_server.get_clients()
         for id, client in clients.items():
             if type == "viser_box":
                 client.camera.position = self.box.position
                 client.camera.wxyz = self.box.wxyz
-            # if type == "box_nerf":
-            #     matrix = nerf_c2w[:3, :3].cpu().numpy()
-            #     wxyz = R.from_matrix(matrix).as_quat()
-            #     self.box.position = (nerf_c2w[0][3].cpu().numpy(), nerf_c2w[1][3].cpu().numpy(), nerf_c2w[2][3].cpu().numpy())
-            #     self.box.wxyz = wxyz
             else:
                 self.box.position = client.camera.position
                 self.box.wxyz = client.camera.wxyz
+                x, y, z = self.box.position
+                q_x, q_y, q_z = R.from_quat(self.box.wxyz).as_euler('xyz', degrees=True)
+                self.box_pos_x.value = x
+                self.box_pos_y.value = y
+                self.box_pos_z.value = z
+                self.box_wxyz_x.value = q_x
+                self.box_wxyz_y.value = q_y
+                self.box_wxyz_z.value = q_z
 
  
     def delete_point_cloud(self):
