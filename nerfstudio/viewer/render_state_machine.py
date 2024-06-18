@@ -287,12 +287,50 @@ class RenderStateMachine(threading.Thread):
     
     def add_gui(self) -> None:
         
+        pos_x = 2
+        pos_y = -1
+        pos_z = 2
+        
+        rot_x = 0
+        rot_y = 0
+        rot_z = 2
+        
+        quad = R.from_euler('xyz', [rot_x, rot_y, rot_z], degrees=True).as_quat()
+        
+        # Rv = vtf.SO3(wxyz=quad)
+        # Rv_tuple = tuple(Rv.wxyz)
+        # self.viewer.viser_server.add_frame(
+        #     "pose_frame", 
+        #     True, 
+        #     position=(pos_x, pos_y, pos_z), 
+        #     wxyz=Rv_tuple, 
+        #     axes_length=0.3, 
+        #     axes_radius=0.01
+        # )
+        # Rv = torch.tensor(Rv.as_matrix())
+        # origin = torch.tensor((pos_x, pos_y, pos_z), dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+        # c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
+        
         # with self.viewer.viser_server.add_gui_folder("Density Options FOV", expand_by_default=False):
         #     self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
         #     # self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
         #     self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
             # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
-            
+        self.viewer.viser_server.add_gui_button("Add Pose Coordinate", color="violet").on_click(lambda _: add_pose_coordinate())
+              
+        def add_pose_coordinate():
+            self.viewer.viser_server.add_frame(
+                "pose_frame", 
+                True, 
+                position=(pos_x, pos_y, pos_z), 
+                wxyz=quad, 
+                axes_length=0.3, 
+                axes_radius=0.01
+            )
+            Debugging.log("quad", quad)
+            Debugging.log("eul", (rot_x, rot_y, rot_z))
+            Debugging.log("position", (pos_x, pos_y, pos_z))
+        
         with self.viewer.viser_server.add_gui_folder("Camera Options"):
             self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.set_camera_box("viser_box"))
             self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.set_camera_box(""))
@@ -320,7 +358,7 @@ class RenderStateMachine(threading.Thread):
         with self.viewer.viser_server.add_gui_folder("Box Position"):
             self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 0)
             self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 0)
-            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -4, 4, 0.01, 0)
+            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 0)
         
         with self.viewer.viser_server.add_gui_folder("Box WXYZ"):
             self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, 0)
@@ -369,7 +407,6 @@ class RenderStateMachine(threading.Thread):
             # densities = self.densities
             # density_locations = self.density_locations # type: ignore
         else:
-            import viser.transforms as vtf
             Rv = vtf.SO3(wxyz=self.box.wxyz)
             Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
             Rv = torch.tensor(Rv.as_matrix())
@@ -412,6 +449,7 @@ class RenderStateMachine(threading.Thread):
 
         # filtered_locations = torch.tensor([])
         filtered_locations = []
+        Debugging.log("densities_locations_unfiltert", outputs["densities_locations"][0].shape)
 
         # Berechne globalen Mittelwert und Standardabweichung über alle Dichtewerte
         all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
