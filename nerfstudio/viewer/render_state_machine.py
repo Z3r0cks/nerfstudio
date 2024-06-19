@@ -107,6 +107,7 @@ class RenderStateMachine(threading.Thread):
         self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
+        self.translate_pos_from_omnivers = (1.1250000243727118, 1.2750000505149364, 3.652500031888485)
         
         # self.densities = []
         # self.density_locations = []
@@ -287,49 +288,25 @@ class RenderStateMachine(threading.Thread):
     
     def add_gui(self) -> None:
         
-        pos_x = 2
-        pos_y = -1
-        pos_z = 2
-        
-        rot_x = 0
-        rot_y = 0
-        rot_z = 2
-        
-        quad = R.from_euler('xyz', [rot_x, rot_y, rot_z], degrees=True).as_quat()
-        
-        # Rv = vtf.SO3(wxyz=quad)
-        # Rv_tuple = tuple(Rv.wxyz)
-        # self.viewer.viser_server.add_frame(
-        #     "pose_frame", 
-        #     True, 
-        #     position=(pos_x, pos_y, pos_z), 
-        #     wxyz=Rv_tuple, 
-        #     axes_length=0.3, 
-        #     axes_radius=0.01
-        # )
-        # Rv = torch.tensor(Rv.as_matrix())
-        # origin = torch.tensor((pos_x, pos_y, pos_z), dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
-        # c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
-        
         # with self.viewer.viser_server.add_gui_folder("Density Options FOV", expand_by_default=False):
         #     self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
         #     # self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
         #     self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
             # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
-        self.viewer.viser_server.add_gui_button("Add Pose Coordinate", color="violet").on_click(lambda _: add_pose_coordinate())
-              
+        # self.viewer.viser_server.add_gui_button("Add Check Coordinate Frame", color="dark").on_click(lambda _: add_pose_coordinate())
+        
+        frame_factor = self.viewer.viser_server.add_gui_slider("Coordinate Frame factor", 1, 5, 0.01, 1.34)
+        frame_factor.on_update(lambda _: add_pose_coordinate())
         def add_pose_coordinate():
+            x, y, z = self.translate_pos_from_omnivers
             self.viewer.viser_server.add_frame(
                 "pose_frame", 
                 True, 
-                position=(pos_x, pos_y, pos_z), 
-                wxyz=quad, 
+                position=(-x*frame_factor.value, -y*frame_factor.value, -z*frame_factor.value), 
+                wxyz=(1.0, 0.0, 0.0, 0.0), 
                 axes_length=0.3, 
                 axes_radius=0.01
             )
-            Debugging.log("quad", quad)
-            Debugging.log("eul", (rot_x, rot_y, rot_z))
-            Debugging.log("position", (pos_x, pos_y, pos_z))
         
         with self.viewer.viser_server.add_gui_folder("Camera Options"):
             self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.set_camera_box("viser_box"))
