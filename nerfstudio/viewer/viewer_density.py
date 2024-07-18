@@ -61,7 +61,7 @@ from nerfstudio.viewer.render_state_machine import RenderAction
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
 
-VISER_NERFSTUDIO_SCALE_RATIO: float = 10.0
+VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
 
 @decorate_all([check_main_thread])
@@ -366,15 +366,11 @@ class ViewerDensity:
         # model.get_outputs(origin)
         # outputs = model.get_outputs(ray_bundle)
         
-        
-        
-        # print(model.get_proposal_networks())
         # density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
         # density_locations  = model.get_sample_locations()
         # field = model.get_field()
         # density, base_mlp_out = field.get_density(ray_samples)
-        # print(density)
-        # print(density.shape)
+
         # sample_locations = field.get_sample_loaction()
         # self.test_visualize_density(sample_locations)
         # self.visualize_density_viser(ray_bundle, density)
@@ -388,7 +384,6 @@ class ViewerDensity:
                 # detach the tensor from the computation graph
                 sample_detached = sample.detach() # Detach the tensor
                 sample_tuple = tuple(sample_detached.numpy()) # Convert to NumPy array then to tuple
-                # print(sample_tuple)
                 self.viser_server.add_icosphere(
                     name=sphere_name,
                     subdivisions=2,
@@ -674,7 +669,6 @@ class ViewerDensity:
             # train_state="completed",
             # eval_dataset=pipeline.datamanager.eval_dataset,
         #)
-        # print(train_dataset[0]["image"])
         # open("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/image_indices.txt", "w").write(str(image_indices))
         
         # draw the training cameras and images

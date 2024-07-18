@@ -124,6 +124,7 @@ class CameraOptimizer(nn.Module):
         outputs = []
 
         # Apply learned transformation delta.
+        self.config.mode = "off"
         if self.config.mode == "off":
             pass
         elif self.config.mode == "SO3xR3":

@@ -126,11 +126,6 @@ class Field(nn.Module):
                 density, density_embedding, density_locations = self.get_density(ray_samples)
         else:
             density, density_embedding, density_locations = self.get_density(ray_samples)
-            
-        from nerfstudio.utils.debugging import Debugging
-        
-        # print("2: Base_field, get_density", density.shape)
-        # print("2: Base_field, get_density", density_locations.shape)
 
         field_outputs = self.get_outputs(ray_samples, density_embedding=density_embedding)
         field_outputs[FieldHeadNames.DENSITY] = density  # type: ignore

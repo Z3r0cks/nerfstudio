@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
 
 
-VISER_NERFSTUDIO_SCALE_RATIO: float = 10.0
+VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
 
 @decorate_all([check_main_thread])
@@ -336,7 +336,7 @@ class Viewer:
         self.stats_markdown.content = self.make_stats_markdown(step, None)
 
     def get_camera_state(self, client: viser.ClientHandle) -> CameraState:
-        print(client.camera.wxyz)
+
         R = vtf.SO3(wxyz=client.camera.wxyz)
         R = R @ vtf.SO3.from_x_radians(np.pi)
         R = torch.tensor(R.as_matrix())

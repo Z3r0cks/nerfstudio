@@ -43,7 +43,7 @@ import viser.transforms as vtf
 import viser
 
 #-------------------------------------------------------------
-VISER_NERFSTUDIO_SCALE_RATIO: float = 10.0
+VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
@@ -107,7 +107,24 @@ class RenderStateMachine(threading.Thread):
         self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
-        self.translate_pos_from_omnivers = (1.1250000243727118, 1.2750000505149364, 3.652500031888485)
+        self.frame_factor = 1
+        # self.translate_pos_from_omnivers = (1.1250000243727118, 1.2750000505149364, 3.652500031888485) # diffuse_grey_yellow
+        # self.translate_pos_from_omnivers = (0.0, 0.0, 5.0) # cendroid
+        # self.translate_pos_from_omnivers = (0.0, 0.0, 1.5714285714285714) # cendroid3
+        # self.translate_pos_from_omnivers = (0.0, 0.0, 2.4285714285714284) # cendroid4
+        # self.translate_pos_from_omnivers = (0.0, 0.0, 3.0) # cendroid4b
+        # self.translate_pos_from_omnivers = (3.000000051657359, 0.9999999701976776, 2.0) # cendroid5
+        # self.translate_pos_from_omnivers = (1, 1, 3.5400000005960464) # cendroidcamera
+        # self.translate_pos_from_omnivers = (1, 1, 3.5400000005960464) # cendroidcamera
+        # self.translate_pos_from_omnivers = (1.0000000049670537, 1.0000000049670537, 1.5) # cendroidcamera2
+        # self.translate_pos_from_omnivers = (0.0, 0.0, 3.0) # cendroidcamera3
+        # self.translate_pos_from_omnivers = (0, 0, 0) # origin
+        # self.translate_pos_from_omnivers = (1, 1, 3.5399999618530273) # yellow_grey
+        # self.translate_pos_from_omnivers = (4.238552619995062e-08, 0, 3.5399999618530273) # cube
+        # self.translate_pos_from_omnivers = (1.2000001668930054, 0.6000000238418579, -8.100000381469727) # cube3
+        # self.translate_pos_from_omnivers = (1, -1.9999998807907104, 8.5) # cube_singe
+        self.translate_pos_from_omnivers = (1, -2, 10) # cube_interference
+        
         
         # self.densities = []
         # self.density_locations = []
@@ -287,22 +304,15 @@ class RenderStateMachine(threading.Thread):
         return np.where(kept_indices)[0]
     
     def add_gui(self) -> None:
-        
-        # with self.viewer.viser_server.add_gui_folder("Density Options FOV", expand_by_default=False):
-        #     self.viewer.viser_server.add_gui_button("Create Densites FOV", color="green").on_click(lambda _: self._show_density(FOV=True))
-        #     # self.viewer.viser_server.add_gui_button("Clear FOV Stack", color="red").on_click(lambda _: self.void_id())
-        #     self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True, True))
-            # self.viewer.viser_server.add_gui_button("FOV Coords", color="violet").on_click(lambda _: self.get_camera_coods())
-        # self.viewer.viser_server.add_gui_button("Add Check Coordinate Frame", color="dark").on_click(lambda _: add_pose_coordinate())
-        
-        frame_factor = self.viewer.viser_server.add_gui_slider("Coordinate Frame factor", 1, 5, 0.01, 1.34)
+        frame_factor = self.viewer.viser_server.add_gui_slider("Coordinate Frame factor", -10, 10, 0.01, 1)
         frame_factor.on_update(lambda _: add_pose_coordinate())
+        x_omni, y_omni, z_omni = self.translate_pos_from_omnivers
         def add_pose_coordinate():
-            x, y, z = self.translate_pos_from_omnivers
+            self.frame_factor = frame_factor.value
             self.viewer.viser_server.add_frame(
                 "pose_frame", 
                 True, 
-                position=(-x*frame_factor.value, -y*frame_factor.value, -z*frame_factor.value), 
+                position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor), 
                 wxyz=(1.0, 0.0, 0.0, 0.0), 
                 axes_length=0.3, 
                 axes_radius=0.01
@@ -327,10 +337,12 @@ class RenderStateMachine(threading.Thread):
             self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
 
         
-        self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=100.0, aspect=1, scale=0.1 ,color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(0, 0, 0))
+        self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=100.0, aspect=1, scale=0.1 ,color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
+
+        
         # th_va= 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
-            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", 0, 1, 0.001, 0)
+            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -1, 1, 0.001, 0)
             
         with self.viewer.viser_server.add_gui_folder("Box Position"):
             self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 0)
@@ -356,68 +368,52 @@ class RenderStateMachine(threading.Thread):
         self.box_pa.on_update(lambda _: setattr(self, "pixel_area", self.box_pa.value))
     
     def update_cube(self):
+        x, y, z = self.translate_pos_from_omnivers
         self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
-        self.box.position = (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)
-        
-    def calculate_transmittance(self, densities):
-        """Calculate the transmittance from the densities
+        self.box.position = (self.box_pos_x.value-x*self.frame_factor, self.box_pos_y.value-y*self.frame_factor, self.box_pos_z.value-z*self.frame_factor)
 
-        Args:
-            densities: the densities
-        Returns:
-            transimttance: the transmittance """
         
-        print("test")
-        
-    def _show_density(self, plot_density: bool = False, FOV: bool = False, clickable: bool = False) -> None:
+    def _show_density(self, plot_density: bool = False, clickable: bool = False) -> None:
         """Show the density in the viewer
 
         Args:
             density_location: the density location
-        """
+        """ 
+
+        Rv = vtf.SO3(wxyz=self.box.wxyz)
+        Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
+        Rv = torch.tensor(Rv.as_matrix())
+        origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+        c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
         
-        print("------------------------------------------------")
-        
-        
-        if FOV:
-            print("FOV")
-            # densities = self.densities
-            # density_locations = self.density_locations # type: ignore
-        else:
-            Rv = vtf.SO3(wxyz=self.box.wxyz)
-            Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
-            Rv = torch.tensor(Rv.as_matrix())
-            origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
-            c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
-            
-            import math
-            fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
-            fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
+        import math
+        fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
+        fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
 
-            fx = torch.tensor([[fx_value]], device='cuda:0')
-            fy = torch.tensor([[fy_value]], device='cuda:0')
-            cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
-            cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
+        fx = torch.tensor([[fx_value]], device='cuda:0')
+        fy = torch.tensor([[fy_value]], device='cuda:0')
+        cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
+        cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
 
-            camera = Cameras(
-                camera_to_worlds=c2w,
-                fx=fx,
-                fy=fy,
-                cx=cx,
-                cy=cy,
-                width=torch.tensor([[self.FOV_width]]),
-                height=torch.tensor([[self.FOV_height]]),
-                distortion_params=None,
-                camera_type=torch.tensor([[1]], device='cuda:0'),
-                times=torch.tensor([[0.]], device='cuda:0')
-            )
+        camera = Cameras(
+            camera_to_worlds=c2w,
+            fx=fx,
+            fy=fy,
+            cx=cx,
+            cy=cy,
+            width=torch.tensor([[self.FOV_width]]),
+            height=torch.tensor([[self.FOV_height]]),
+            distortion_params=None,
+            camera_type=torch.tensor([[1]], device='cuda:0'),
+            times=torch.tensor([[0.]], device='cuda:0')
+        )
 
-            assert isinstance(camera, Cameras)
-            outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
+        assert isinstance(camera, Cameras)
+        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
 
-            # Extrahiere die Dichtewerte und Dichtepositionen
-            all_densities = []
-            all_density_locations = []
+        # Extrahiere die Dichtewerte und Dichtepositionen
+        all_densities = []
+        all_density_locations = []
             
         for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
             all_densities.append(densities)
@@ -442,9 +438,11 @@ class RenderStateMachine(threading.Thread):
             # standardisieren
             standardized_densities = (ray_densities - global_mean) / global_std
             mask = standardized_densities.squeeze() > self.density_threshold
+            Debugging.log("mask", mask)
             # min_value = standardized_densities.min()
             if torch.any(mask):
                 first_index = torch.where(mask)[0][0]
+                Debugging.log("first_index", ray_locations[first_index].unsqueeze(0))
                 filtered_locations.append(ray_locations[first_index].unsqueeze(0))
 
                 # filtered_densities.append(ray_densities[first_index].unsqueeze(0))
@@ -467,8 +465,8 @@ class RenderStateMachine(threading.Thread):
         filtered_locations = filtered_locations.cpu().numpy()
         # filtered_densities = filtered_densities.cpu().numpy()
 
-        remaining_indices = self.filter_nearby_indices(filtered_locations)
-        filtered_locations = filtered_locations[remaining_indices]
+        # remaining_indices = self.filter_nearby_indices(filtered_locations)
+        # filtered_locations = filtered_locations[remaining_indices]
 
         
         Debugging.log("densities_locations_filtert", filtered_locations.shape)
@@ -498,7 +496,7 @@ class RenderStateMachine(threading.Thread):
             for index, location in enumerate(filtered_locations):
                 self.add_point_as_mesh(location, index)
         
-    def add_point_as_mesh(self, location, index, scale_factor=10, base_size=0.003, color=(255, 0, 255)):
+    def add_point_as_mesh(self, location, index, scale_factor=1, base_size=0.03, color=(255, 0, 255)):
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -551,7 +549,7 @@ class RenderStateMachine(threading.Thread):
             visible=True
         )
         distance_ray.on_click(lambda _: distance_ray.remove())
-        # print("Distance: ", distance)
+
         # with modal:
         #     self.viewer.viser_server.add_gui_markdown(f"Distance: {distance:.2f} m")
         #     # frame_origin = self.viewer.viser_server.add_frame("origin_frame", True, position=self.box.position, axes_length=0.3, axes_radius=0.01)
@@ -567,8 +565,7 @@ class RenderStateMachine(threading.Thread):
         b: point b
         returns: distance
         """
-        print("origin", a)
-        print("Point", b)
+
         return (np.linalg.norm(np.array(a) - np.array(b)))
     
     def compute_opacity(self, density, distance):

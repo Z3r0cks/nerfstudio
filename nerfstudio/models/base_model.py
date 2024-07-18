@@ -215,10 +215,7 @@ class Model(nn.Module):
             outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
         outputs["densities_locations"] = outputs_lists["densities_locations"]
         outputs["densities"] = outputs_lists["densities"]
-        # print("outputs_lists", outputs_lists)
-        # for densities, positions in zip(outputs["densities"], outputs["densities_locations"]):
-            # print("4: base_model, density", densities.shape)
-            # print("4: base_model, position", positions.shape)
+
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:
