@@ -144,6 +144,7 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
 def entrypoint():
     """Entrypoint for use with pyproject scripts."""
     
+    print("Test1")
     # tyro is a python biblotek that provides a command line interface for python scripts
     tyro.extras.set_accent_color("green")
     tyro.cli(tyro.conf.FlagConversionOff[RunViewer]).main()
@@ -151,6 +152,7 @@ def entrypoint():
 
 
 if __name__ == "__main__":
+    print("Test")
     entrypoint()
 
 # For sphinx docs

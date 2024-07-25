@@ -41,7 +41,8 @@ from nerfstudio.utils.debugging import Debugging
 from scipy.spatial.transform import Rotation as R
 import viser.transforms as vtf
 import viser
-
+import math
+import csv
 #-------------------------------------------------------------
 VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
@@ -100,38 +101,17 @@ class RenderStateMachine(threading.Thread):
         self.running = True
         
         #-------------------------------------------------------------
+        self.ray_id = 0
         self.density_threshold = 0
         self.FOV = 60
-        self.FOV_width = 50
-        self.FOV_height = 50
+        self.FOV_width = 1
+        self.FOV_height = 1
         self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
         self.frame_factor = 1
-        # self.translate_pos_from_omnivers = (1.1250000243727118, 1.2750000505149364, 3.652500031888485) # diffuse_grey_yellow
-        # self.translate_pos_from_omnivers = (0.0, 0.0, 5.0) # cendroid
-        # self.translate_pos_from_omnivers = (0.0, 0.0, 1.5714285714285714) # cendroid3
-        # self.translate_pos_from_omnivers = (0.0, 0.0, 2.4285714285714284) # cendroid4
-        # self.translate_pos_from_omnivers = (0.0, 0.0, 3.0) # cendroid4b
-        # self.translate_pos_from_omnivers = (3.000000051657359, 0.9999999701976776, 2.0) # cendroid5
-        # self.translate_pos_from_omnivers = (1, 1, 3.5400000005960464) # cendroidcamera
-        # self.translate_pos_from_omnivers = (1, 1, 3.5400000005960464) # cendroidcamera
-        # self.translate_pos_from_omnivers = (1.0000000049670537, 1.0000000049670537, 1.5) # cendroidcamera2
-        # self.translate_pos_from_omnivers = (0.0, 0.0, 3.0) # cendroidcamera3
-        # self.translate_pos_from_omnivers = (0, 0, 0) # origin
-        # self.translate_pos_from_omnivers = (1, 1, 3.5399999618530273) # yellow_grey
-        # self.translate_pos_from_omnivers = (4.238552619995062e-08, 0, 3.5399999618530273) # cube
-        # self.translate_pos_from_omnivers = (1.2000001668930054, 0.6000000238418579, -8.100000381469727) # cube3
-        # self.translate_pos_from_omnivers = (1, -1.9999998807907104, 8.5) # cube_singe
         self.translate_pos_from_omnivers = (1, -2, 10) # cube_interference
-        
-        
-        # self.densities = []
-        # self.density_locations = []
-    
-    # def void_id(self):
-    #     self.densities = []
-    #     self.density_locations = []
+        #-------------------------------------------------------------
         
     def action(self, action: RenderAction):
         """Takes an action and updates the state machine
@@ -317,7 +297,7 @@ class RenderStateMachine(threading.Thread):
                 axes_length=0.3, 
                 axes_radius=0.01
             )
-        
+        self.ray_id
         with self.viewer.viser_server.add_gui_folder("Camera Options"):
             self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.set_camera_box("viser_box"))
             self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.set_camera_box(""))
@@ -325,9 +305,12 @@ class RenderStateMachine(threading.Thread):
             # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
+            test = self.viewer.viser_server.add_gui_button("Get Ray Information", color="cyan").on_click(lambda _: self.get_ray_infos())
+            self.viewer.viser_server.add_gui_button("New Ray Id", color="yellow").on_click(lambda _: self.increment_ray_id())
             self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
             self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
+            self.viewer.viser_server.add_gui_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
             self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
             
         with self.viewer.viser_server.add_gui_folder("Density Settings"):
@@ -337,22 +320,20 @@ class RenderStateMachine(threading.Thread):
             self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
 
         
-        self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=100.0, aspect=1, scale=0.1 ,color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
+        self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
 
-        
-        # th_va= 0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
-            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -1, 1, 0.001, 0)
+            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", 0, 1000000, 0.001, 0)
             
         with self.viewer.viser_server.add_gui_folder("Box Position"):
-            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 0)
-            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 0)
-            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 0)
+            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 1)
+            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 1)
+            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.5)
         
         with self.viewer.viser_server.add_gui_folder("Box WXYZ"):
-            self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, 0)
+            self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, -90)
             self.box_wxyz_y = self.viewer.viser_server.add_gui_slider("Rot Y", -180, 180, 0.1, 0)
-            self.box_wxyz_z = self.viewer.viser_server.add_gui_slider("Rot Z", -180, 180, 0.1, 0)
+            self.box_wxyz_z = self.viewer.viser_server.add_gui_slider("Rot Z", -180, 180, 0.1, 90)
               
         self.box_pos_x.on_update(lambda _: self.update_cube())
         self.box_pos_y.on_update(lambda _: self.update_cube())
@@ -366,6 +347,15 @@ class RenderStateMachine(threading.Thread):
         self.box_heigth.on_update(lambda _: setattr(self, "FOV_height", self.box_heigth.value))
         self.box_width.on_update(lambda _: setattr(self, "FOV_width", self.box_width.value))
         self.box_pa.on_update(lambda _: setattr(self, "pixel_area", self.box_pa.value))
+
+    def get_ray_infos(self) -> None:
+        for i in range(50):
+            self._show_density(showInformations=True)
+        self.increment_ray_id()
+    
+    def increment_ray_id(self) -> None:
+        self.ray_id += 1
+        Debugging.log("ray_id: ", self.ray_id)
     
     def update_cube(self):
         x, y, z = self.translate_pos_from_omnivers
@@ -373,20 +363,19 @@ class RenderStateMachine(threading.Thread):
         self.box.position = (self.box_pos_x.value-x*self.frame_factor, self.box_pos_y.value-y*self.frame_factor, self.box_pos_z.value-z*self.frame_factor)
 
         
-    def _show_density(self, plot_density: bool = False, clickable: bool = False) -> None:
+    def _show_density(self, plot_density: bool = False, clickable: bool = False, showInformations = False) -> None:
         """Show the density in the viewer
 
         Args:
             density_location: the density location
         """ 
-
+        
         Rv = vtf.SO3(wxyz=self.box.wxyz)
         Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
         Rv = torch.tensor(Rv.as_matrix())
         origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
         
-        import math
         fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
         fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
 
@@ -422,34 +411,131 @@ class RenderStateMachine(threading.Thread):
 
         # filtered_locations = torch.tensor([])
         filtered_locations = []
-        Debugging.log("densities_locations_unfiltert", outputs["densities_locations"][0].shape)
+        filtered_densities = []
 
         # Berechne globalen Mittelwert und Standardabweichung über alle Dichtewerte
         all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
         all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
 
-        global_mean = torch.mean(all_densities)
-        global_std = torch.std(all_densities)
 
         for ray_locations, ray_densities in zip(all_density_locations, all_densities):
             if ray_densities.numel() == 0:
                 continue
-
-            # standardisieren
-            standardized_densities = (ray_densities - global_mean) / global_std
-            mask = standardized_densities.squeeze() > self.density_threshold
-            Debugging.log("mask", mask)
-            # min_value = standardized_densities.min()
-            if torch.any(mask):
-                first_index = torch.where(mask)[0][0]
-                Debugging.log("first_index", ray_locations[first_index].unsqueeze(0))
-                filtered_locations.append(ray_locations[first_index].unsqueeze(0))
-
-                # filtered_densities.append(ray_densities[first_index].unsqueeze(0))
-            else:
-                pass
+  
+        # standardize densities methode:
         
-        filtered_locations = torch.cat(filtered_locations)
+            # global_mean = torch.mean(all_densities)
+            # global_std = torch.std(all_densities)
+            # standardized_densities = (ray_densities - global_mean) / global_std
+        
+            # mask = standardized_densities.squeeze() > self.density_threshold
+            # if torch.any(mask):
+            #     first_index = torch.where(mask)[0][0]
+            #     filtered_locations.append(ray_locations[first_index].unsqueeze(0))
+            # else:
+            #     pass
+
+        # density sum methode:
+        
+            # density_sum = 0 
+            # for location, density in zip(ray_locations, ray_densities):
+            #     density_sum += density.item()  # sum of densities
+            #     if density_sum >= self.density_threshold:
+            #         filtered_locations.append(location.tolist())    
+            #         break
+                
+        # theshold methode: 
+            
+            # density_sum = 0
+             
+            # for location, density in zip(ray_locations, ray_densities):
+            #     if density > self.density_threshold:
+            #         print(density)
+            #         filtered_locations.append(location.tolist())    
+            #         break
+            
+        # 4.5667e-164
+        
+        # difference methode:
+             # normalized densities:
+            # min_density = torch.min(ray_densities)
+            # max_density = torch.max(ray_densities)
+            # normalized_densities = (ray_densities - min_density) / (max_density - min_density + 1e-8)  # +1e-8 um Division durch 0 zu vermeiden
+                
+            # first_iteration = True
+            # density_differece = 0
+            # previous_density = 0
+            # for location, density in zip(ray_locations, ray_densities):
+            #     if first_iteration:
+            #         first_iteration = False
+            #         previous_density = density
+            #         continue
+            #     if not first_iteration:
+            #         density_differece = abs(density - previous_density)
+            #     if not first_iteration and density_differece > self.density_threshold:
+            #         filtered_locations.append(location.tolist())
+            #         filtered_densities.append(density)
+            #         break
+        
+            # takte the point which is nearest to nearestDistanceToCamera
+            if showInformations:
+                distance_search = 1
+                min_difference = float('inf')  # Initialisiere mit einem sehr großen Wert
+                density_current = None
+                location_current = None
+
+                for location, density in zip(ray_locations, ray_densities):
+                    distance = self.compute_distance(origin, location)
+                    difference = abs(distance - distance_search)
+
+                    if difference < min_difference:
+                        min_difference = difference
+                        density_current = density
+                        location_current = location.tolist()
+
+                if density_current is not None and location_current is not None:
+                    filtered_densities.append(density_current)
+                    filtered_locations.append(location_current)
+                    self.save_ray_informations(self.compute_distance(origin, location_current), density_current)
+            else:
+            
+            # biggest difference methode:
+                for location, density in zip(ray_locations, ray_densities):
+                    first_iteration = True
+                    density_differece = 0
+                    previous_density = 0
+                    densities_diff_list = []
+                    for location, density in zip(ray_locations, ray_densities):
+                        if first_iteration:
+                            first_iteration = False
+                            previous_density = density
+                            continue
+                        else:
+                            density_differece = abs(density - previous_density)
+                            densities_diff_list.append(density_differece)
+                            
+                Debugging.log("densities_diff_list:", densities_diff_list)
+                max_element = densities_diff_list[0]
+                index = 1
+                for index in range (1,len(densities_diff_list)): #iterate over array
+                    if densities_diff_list[index] > max_element: #to check max value
+                        max_element = densities_diff_list[index]
+                        index = index
+
+                filtered_locations.append(ray_locations[index].tolist())
+                filtered_densities.append(ray_densities[index])
+                Debugging.log("densitiy:", ray_densities[index])
+            
+            # show all densities methode:
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if density > 0 and density < self.density_threshold:
+                #         filtered_locations.append(location.tolist())
+                #         filtered_densities.append(density)
+                # print(ray_locations[index].tolist())
+                    
+        filtered_locations = torch.tensor(filtered_locations)
+        filtered_densities = torch.tensor(filtered_densities)
+        # filtered_locations = torch.cat(filtered_locations)
         
         # #calculate the transmittance points for each point to get the opacity
         # for ray_locations, ray_densities in zip(all_density_locations[0], all_densities[0]):
@@ -461,14 +547,13 @@ class RenderStateMachine(threading.Thread):
      
 
         # # filtered_densities = torch.cat(filtered_densities)
-        
-        filtered_locations = filtered_locations.cpu().numpy()
+        filtered_locations = filtered_locations.numpy()
+        filtered_densities = filtered_densities.numpy()
         # filtered_densities = filtered_densities.cpu().numpy()
 
         # remaining_indices = self.filter_nearby_indices(filtered_locations)
         # filtered_locations = filtered_locations[remaining_indices]
 
-        
         Debugging.log("densities_locations_filtert", filtered_locations.shape)
         
         if plot_density:
@@ -485,7 +570,9 @@ class RenderStateMachine(threading.Thread):
         if not plot_density and not clickable:
             if len(self.mesh_objs) > 0:
                 self.delete_point_cloud()
-                
+            
+            Debugging.log("filtered_locations", filtered_locations.shape)
+            # Debugging.log("filtered_locations", filtered_locations)
             obj = self.viewer.viser_server.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.01, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
             self.mesh_objs.append(obj)
             
@@ -493,10 +580,10 @@ class RenderStateMachine(threading.Thread):
             if len(self.mesh_objs) > 0:
                 self.delete_point_cloud()
                 
-            for index, location in enumerate(filtered_locations):
-                self.add_point_as_mesh(location, index)
-        
-    def add_point_as_mesh(self, location, index, scale_factor=1, base_size=0.03, color=(255, 0, 255)):
+            for index, (location, density) in enumerate(zip(filtered_locations, filtered_densities)):
+                self.add_point_as_mesh(location, index, density)
+
+    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.008, color= (0, 0, 255)):
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -517,18 +604,23 @@ class RenderStateMachine(threading.Thread):
             position=(0, 0, 0),  # position bereits in vertices definiert
             visible=True,
         )
-        obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO))
+        obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO, density))
         
         self.mesh_objs.append(obj)
         
-    def add_distance_modal(self, point):
+    def add_distance_modal(self, point, density):
         """ 
         add a modal to show the distance of a point
         point: point
         """
         
-        distance = self.compute_distance(self.box.position, point)
-        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {distance:.2f} m", (1, 0, 0, 0), self.box.position)
+        global global_distance
+        global global_density
+        global_distance = self.compute_distance(self.box.position, point)
+        global_density = density
+        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.5f} m", (1, 0, 0, 0), self.box.position)
+        destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), point)
+        
         # distance_label.label_size = 0.1
         # distance_ray = self.viewer.viser_server.add_gui_modal("Distance")
         point3 = self.box.position + (point - self.box.position) * 0.001
@@ -548,6 +640,11 @@ class RenderStateMachine(threading.Thread):
             position=(0.0, 0.0, 0.0),
             visible=True
         )
+
+        self.mesh_objs.append(distance_label)
+        self.mesh_objs.append(destity_label)
+        self.mesh_objs.append(distance_ray)
+        
         distance_ray.on_click(lambda _: distance_ray.remove())
 
         # with modal:
@@ -557,7 +654,40 @@ class RenderStateMachine(threading.Thread):
         #     # frame_origin.on_click(lambda _: frame_origin.remove())
         #     # frame_target.on_click(lambda _: frame_target.remove())
         #     self.viewer.viser_server.add_gui_button("Close").on_click(lambda _: modal.close())
+    
+    def toggle_labels(self):
+        for obj in self.mesh_objs:
+            if obj._impl.name == "density_label":
+                obj.visible = not obj.visible
+            if obj._impl.name == "distance_label":
+                obj.visible = not obj.visible
+                
+    def save_ray_informations(self, distance, density):
+        position = self.box.position.tolist() if isinstance(self.box.position, np.ndarray) else self.box.position
+        rot = [self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value]
         
+        distance = float(distance) if isinstance(distance, float) else distance
+        density = density.item() if isinstance(density, torch.Tensor) else density
+        
+        self.csv_filename = 'ray_information.csv'
+        try:
+            with open(self.csv_filename, 'x', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                headers = ["id", "position_x", "position_y", "position_z", "rotation_x", "rotation_y", "rotation_z", "distance", "density"]
+                csvwriter.writerow(headers)
+        except FileExistsError:
+            pass
+        
+        print("id", type([self.ray_id]))
+        # print("position", type(position))
+        # print("rot", type(rot))
+        # print("distance", type(distance))
+        # print("density", type(density))
+        with open(self.csv_filename, 'a', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile)
+            row = [self.ray_id] + position + rot + [distance, density]
+            csvwriter.writerow(row)
+                
     def compute_distance(self, a, b):
         """ 
         computes the distance between two points
