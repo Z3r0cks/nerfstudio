@@ -306,6 +306,7 @@ class RenderStateMachine(threading.Thread):
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
             test = self.viewer.viser_server.add_gui_button("Get Ray Information", color="cyan").on_click(lambda _: self.get_ray_infos())
+            test = self.viewer.viser_server.add_gui_button("Take Screenshot", color="green").on_click(lambda _: self.take_screenshot())
             self.viewer.viser_server.add_gui_button("New Ray Id", color="yellow").on_click(lambda _: self.increment_ray_id())
             self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
             self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
@@ -323,7 +324,7 @@ class RenderStateMachine(threading.Thread):
         self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
 
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
-            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", 0, 1000000, 0.001, 0)
+            self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -1000000, 1000000, 0.001, 0)
             
         with self.viewer.viser_server.add_gui_folder("Box Position"):
             self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 1)
@@ -347,6 +348,28 @@ class RenderStateMachine(threading.Thread):
         self.box_heigth.on_update(lambda _: setattr(self, "FOV_height", self.box_heigth.value))
         self.box_width.on_update(lambda _: setattr(self, "FOV_width", self.box_width.value))
         self.box_pa.on_update(lambda _: setattr(self, "pixel_area", self.box_pa.value))
+
+    def take_screenshot(self):
+        import pyautogui
+        # from PIL import Image
+        
+        file_name = "id_" + str(self.ray_id) + "t=" + str(self.threshold_slider.value) + ".png"
+        file_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/screenshots/single_ray_density/"
+        screenshot = pyautogui.screenshot()
+        
+        crop_size = 1000  # 50 pixels in all directions means a total of 100x100 pixels
+
+        # Get the dimensions of the screenshot
+        width, height = screenshot.size
+
+        # Calculate the cropping box centered in the screenshot
+        left = (width - crop_size) // 2
+        top = (height - crop_size) // 2
+        right = left + crop_size
+        bottom = top + crop_size
+        
+        cropped_image = screenshot.crop((left, top, right, bottom))
+        cropped_image.save(file_dir + file_name)
 
     def get_ray_infos(self) -> None:
         for i in range(50):
@@ -421,62 +444,7 @@ class RenderStateMachine(threading.Thread):
         for ray_locations, ray_densities in zip(all_density_locations, all_densities):
             if ray_densities.numel() == 0:
                 continue
-  
-        # standardize densities methode:
-        
-            # global_mean = torch.mean(all_densities)
-            # global_std = torch.std(all_densities)
-            # standardized_densities = (ray_densities - global_mean) / global_std
-        
-            # mask = standardized_densities.squeeze() > self.density_threshold
-            # if torch.any(mask):
-            #     first_index = torch.where(mask)[0][0]
-            #     filtered_locations.append(ray_locations[first_index].unsqueeze(0))
-            # else:
-            #     pass
-
-        # density sum methode:
-        
-            # density_sum = 0 
-            # for location, density in zip(ray_locations, ray_densities):
-            #     density_sum += density.item()  # sum of densities
-            #     if density_sum >= self.density_threshold:
-            #         filtered_locations.append(location.tolist())    
-            #         break
-                
-        # theshold methode: 
             
-            # density_sum = 0
-             
-            # for location, density in zip(ray_locations, ray_densities):
-            #     if density > self.density_threshold:
-            #         print(density)
-            #         filtered_locations.append(location.tolist())    
-            #         break
-            
-        # 4.5667e-164
-        
-        # difference methode:
-             # normalized densities:
-            # min_density = torch.min(ray_densities)
-            # max_density = torch.max(ray_densities)
-            # normalized_densities = (ray_densities - min_density) / (max_density - min_density + 1e-8)  # +1e-8 um Division durch 0 zu vermeiden
-                
-            # first_iteration = True
-            # density_differece = 0
-            # previous_density = 0
-            # for location, density in zip(ray_locations, ray_densities):
-            #     if first_iteration:
-            #         first_iteration = False
-            #         previous_density = density
-            #         continue
-            #     if not first_iteration:
-            #         density_differece = abs(density - previous_density)
-            #     if not first_iteration and density_differece > self.density_threshold:
-            #         filtered_locations.append(location.tolist())
-            #         filtered_densities.append(density)
-            #         break
-        
             # takte the point which is nearest to nearestDistanceToCamera
             if showInformations:
                 distance_search = 1
@@ -498,40 +466,221 @@ class RenderStateMachine(threading.Thread):
                     filtered_locations.append(location_current)
                     self.save_ray_informations(self.compute_distance(origin, location_current), density_current)
             else:
+  
+            # standardized densities methode: -----------------------------------------------------------------------------------
             
-            # biggest difference methode:
-                for location, density in zip(ray_locations, ray_densities):
-                    first_iteration = True
-                    density_differece = 0
-                    previous_density = 0
-                    densities_diff_list = []
-                    for location, density in zip(ray_locations, ray_densities):
-                        if first_iteration:
-                            first_iteration = False
-                            previous_density = density
-                            continue
-                        else:
-                            density_differece = abs(density - previous_density)
-                            densities_diff_list.append(density_differece)
-                            
-                Debugging.log("densities_diff_list:", densities_diff_list)
-                max_element = densities_diff_list[0]
-                index = 1
-                for index in range (1,len(densities_diff_list)): #iterate over array
-                    if densities_diff_list[index] > max_element: #to check max value
-                        max_element = densities_diff_list[index]
-                        index = index
+                # global_mean = torch.mean(all_densities)
+                # global_std = torch.std(all_densities)
+                # standardized_densities = (ray_densities - global_mean) / global_std
+            
+                # mask = standardized_densities.squeeze() > self.density_threshold
+                # if torch.any(mask):
+                #     first_index = torch.where(mask)[0][0]
+                #     filtered_locations.append(ray_locations[first_index].unsqueeze(0))
+                # else:
+                #     pass
 
-                filtered_locations.append(ray_locations[index].tolist())
-                filtered_densities.append(ray_densities[index])
-                Debugging.log("densitiy:", ray_densities[index])
+            # density sum methode: ---------------------------------------------------------------------------------------------
             
+                # density_sum = 0 
+                # for location, density in zip(ray_locations, ray_densities):
+                #     density_sum += density.item()  # sum of densities
+                #     if density_sum >= self.density_threshold:
+                #         filtered_locations.append(location.tolist())    
+                #         break
+                    
+            # multiple points theshold methode: ------------------------------------------------------------------------------------------------
+                
+                for location, density in zip(ray_locations, ray_densities):
+                    # if density > self.density_threshold:
+                    filtered_locations.append(location.tolist())   
+                    filtered_densities.append(density) 
+                    
+            # single point theshold methode: ------------------------------------------------------------------------------------------------
+                
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if density > self.density_threshold:
+                #         filtered_locations.append(location.tolist())   
+                #         filtered_densities.append(density) 
+                #         break
+            
+            # difference methode: ----------------------------------------------------------------------------------------------
+                # normalized densities:
+                # min_density = torch.min(ray_densities)
+                # max_density = torch.max(ray_densities)
+                # normalized_densities = (ray_densities - min_density) / (max_density - min_density + 1e-8)  # +1e-8 um Division durch 0 zu vermeiden
+                    
+                # first_iteration = True
+                # density_differece = 0
+                # previous_density = 0
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if first_iteration:
+                #         first_iteration = False
+                #         previous_density = density
+                #         continue
+                #     if not first_iteration:
+                #         density_differece = abs(density - previous_density)
+                #     if not first_iteration and density_differece > self.density_threshold:
+                #         filtered_locations.append(location.tolist())
+                #         filtered_densities.append(density)
+                #         break
+        
+
+                # largest density difference methode: ---------------------------------------------------------------------
+                
+                # density_diff_list = []
+                # first_iteration = True
+                # previous_density = 0
+
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if first_iteration:
+                #         first_iteration = False
+                #         previous_density = density
+                #     else:
+                #         density_difference = abs(density - previous_density)
+                #         density_diff_list.append(density_difference)
+                #         previous_density = density
+
+                # Debugging.log("density_diff_list:", density_diff_list)
+
+                # # Find the index of the maximum difference
+                # if density_diff_list:
+                #     max_index = 0
+                #     max_element = density_diff_list[0]
+                #     for i in range(1, len(density_diff_list)):
+                #         if density_diff_list[i] > max_element:
+                #             max_element = density_diff_list[i]
+                #             max_index = i + 1  # +1 to align with ray_locations and ray_densities index
+            
+                # first largest density methode: ---------------------------------------------------------------------------
+            
+                # # Initialisierung der Variablen
+                # density_diff_list = []
+                # first_iteration = True
+                # previous_density = 0
+
+                #
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if first_iteration:
+                #         first_iteration = False
+                #         previous_density = density
+                #     else:
+                #         density_difference = abs(density - previous_density)
+                #         density_diff_list.append(density_difference)
+                #         previous_density = density
+
+                # # Debugging.log("density_diff_list:", density_diff_list)
+
+                # # Berechnung der durchschnittlichen Differenz (ohne die erste, die Null ist)
+                # if density_diff_list:
+                #     avg_density_difference = sum(density_diff_list) / len(density_diff_list)
+                #     Debugging.log("Average density difference:", avg_density_difference)
+
+                #     # Finden des ersten signifikanten Anstiegs
+                #     first_iteration = True
+                #     previous_density = 0
+                #     for i, (location, density) in enumerate(zip(ray_locations, ray_densities)):
+                #         if first_iteration:
+                #             first_iteration = False
+                #             previous_density = density
+                #         else:
+                #             density_difference = abs(density - previous_density)
+                #             if density_difference > avg_density_difference * 2:  # z.B. 2-fache der durchschnittlichen Differenz
+                #                 max_index = i
+                #                 break
+                #             previous_density = density
+
+                #     Debugging.log("Max density difference:", density_difference)
+                #     Debugging.log("Max density index:", max_index)
+
+                #     # Verwendung des Indexes, falls gefunden
+                #     if max_index != -1:
+                #         filtered_locations.append(ray_locations[max_index].tolist())
+                #         filtered_densities.append(ray_densities[max_index])
+
+                # filtered_locations.append(ray_locations[max_index-1].tolist())
+                # filtered_densities.append(ray_densities[max_index-1])
+                # Debugging.log("densitiy:", ray_densities[max_index-1])
             # show all densities methode:
                 # for location, density in zip(ray_locations, ray_densities):
                 #     if density > 0 and density < self.density_threshold:
                 #         filtered_locations.append(location.tolist())
                 #         filtered_densities.append(density)
                 # print(ray_locations[index].tolist())
+                
+                
+                # largest treshold density difference methode: -------------------------------------------------------------
+                
+                # density_diff_list = []             
+                # first_iteration = True
+                # previous_density = 0
+
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if first_iteration:
+                #         first_iteration = False
+                #         previous_density = density
+                #     else:
+                #         density_difference = abs(density - previous_density)
+                #         if density_difference >= self.density_threshold:
+                #             filtered_locations.append(location.tolist())
+                #             filtered_densities.append(density)
+                #             break
+                
+                # zscore methode: ---------------------------------------------------------------------------------------
+                
+                # from scipy.stats import zscore
+
+                    
+                # ray_densities = np.array(ray_densities)
+                # z_scores = zscore(ray_densities)
+
+                # for i, z in enumerate(z_scores):
+                #     if z > self.density_threshold:
+                #         filtered_locations.append(ray_locations[i].tolist())
+                #         filtered_densities.append(ray_densities[i])
+                        # break       
+                        
+                # average density methode: ----------------------------------------------------------------------------------------
+                
+                # density_sum = 0
+                # # first_iteration = True
+                # # previous_density = 0
+                # count = 0
+                # for density in ray_densities:
+                #     if density > 0:
+                #         count += 1
+                #         density_sum += density
+                
+                # average_density = density_sum / count
+                
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if density > (average_density-self.density_threshold):
+                #         filtered_locations.append(location.tolist())
+                #         filtered_densities.append(density)
+                
+                # average density difference methode: ----------------------------------------------------------------------------------------
+                
+                # density_difference_sum = 0
+                # first_iteration = True
+                # previous_density = 0
+                # count = 0
+
+                # for density in ray_densities:
+                #     if first_iteration:
+                #         first_iteration = False
+                #         previous_density = density
+                #     else:
+                #         # if density > 0:
+                #         density_difference_sum += abs(density - previous_density)
+                #         count += 1
+                #         previous_density = density
+                
+                # average_density_difference_sum = density_difference_sum / count
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if density >= (average_density_difference_sum + self.density_threshold):
+                #         filtered_locations.append(location.tolist())
+                #         filtered_densities.append(density)
+                        # break
                     
         filtered_locations = torch.tensor(filtered_locations)
         filtered_densities = torch.tensor(filtered_densities)
@@ -583,7 +732,7 @@ class RenderStateMachine(threading.Thread):
             for index, (location, density) in enumerate(zip(filtered_locations, filtered_densities)):
                 self.add_point_as_mesh(location, index, density)
 
-    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.008, color= (0, 0, 255)):
+    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.003, color= (0, 0, 255)):
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -613,13 +762,13 @@ class RenderStateMachine(threading.Thread):
         add a modal to show the distance of a point
         point: point
         """
-        
+        x, y, z = point
         global global_distance
         global global_density
         global_distance = self.compute_distance(self.box.position, point)
         global_density = density
-        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.5f} m", (1, 0, 0, 0), self.box.position)
-        destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), point)
+        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.5f} m", (1, 0, 0, 0), (x - 0.02, y, z + 0.05))
+        destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.06))
         
         # distance_label.label_size = 0.1
         # distance_ray = self.viewer.viser_server.add_gui_modal("Distance")
