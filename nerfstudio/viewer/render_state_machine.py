@@ -305,8 +305,9 @@ class RenderStateMachine(threading.Thread):
             # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods())
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
-            test = self.viewer.viser_server.add_gui_button("Get Ray Information", color="cyan").on_click(lambda _: self.get_ray_infos())
-            test = self.viewer.viser_server.add_gui_button("Take Screenshot", color="green").on_click(lambda _: self.take_screenshot())
+            self.viewer.viser_server.add_gui_button("print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
+            self.viewer.viser_server.add_gui_button("print single ray inf.", color="red").on_click(lambda _: self._show_density(showSingelRayInf=True))
+            self.viewer.viser_server.add_gui_button("Take Screenshot", color="green").on_click(lambda _: self.take_screenshot())
             self.viewer.viser_server.add_gui_button("New Ray Id", color="yellow").on_click(lambda _: self.increment_ray_id())
             self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
             self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
@@ -373,7 +374,7 @@ class RenderStateMachine(threading.Thread):
 
     def get_ray_infos(self) -> None:
         for i in range(50):
-            self._show_density(showInformations=True)
+            self._show_density(showNearesDensity=True)
         self.increment_ray_id()
     
     def increment_ray_id(self) -> None:
@@ -386,7 +387,7 @@ class RenderStateMachine(threading.Thread):
         self.box.position = (self.box_pos_x.value-x*self.frame_factor, self.box_pos_y.value-y*self.frame_factor, self.box_pos_z.value-z*self.frame_factor)
 
         
-    def _show_density(self, plot_density: bool = False, clickable: bool = False, showInformations = False) -> None:
+    def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False) -> None:
         """Show the density in the viewer
 
         Args:
@@ -446,7 +447,7 @@ class RenderStateMachine(threading.Thread):
                 continue
             
             # takte the point which is nearest to nearestDistanceToCamera
-            if showInformations:
+            if showNearesDensity:
                 distance_search = 1
                 min_difference = float('inf')  # Initialisiere mit einem sehr großen Wert
                 density_current = None
@@ -460,13 +461,24 @@ class RenderStateMachine(threading.Thread):
                         min_difference = difference
                         density_current = density
                         location_current = location.tolist()
-
                 if density_current is not None and location_current is not None:
                     filtered_densities.append(density_current)
                     filtered_locations.append(location_current)
-                    self.save_ray_informations(self.compute_distance(origin, location_current), density_current)
+                    self.print_nearest_density(self.compute_distance(origin, location_current), density_current)
+                    
+            elif showSingelRayInf:
+                print_list = []
+                # "id", "location", "distance", "density"
+                for location, density in zip(ray_locations, ray_densities):
+                    density = density.item() if isinstance(density, torch.Tensor) else density
+                    if density > 0:
+                        print_list.append([location.tolist(), self.compute_distance(origin, location), density])
+                
+                self.print_single_ray_informations(print_list)
+                self.ray_id += 1
+                print("ray_id: ", self.ray_id)
+                break
             else:
-  
             # standardized densities methode: -----------------------------------------------------------------------------------
             
                 # global_mean = torch.mean(all_densities)
@@ -491,10 +503,10 @@ class RenderStateMachine(threading.Thread):
                     
             # multiple points theshold methode: ------------------------------------------------------------------------------------------------
                 
-                for location, density in zip(ray_locations, ray_densities):
-                    # if density > self.density_threshold:
-                    filtered_locations.append(location.tolist())   
-                    filtered_densities.append(density) 
+                # for location, density in zip(ray_locations, ray_densities):
+                #     # if density > self.density_threshold:
+                #     filtered_locations.append(location.tolist())   
+                #     filtered_densities.append(density) 
                     
             # single point theshold methode: ------------------------------------------------------------------------------------------------
                 
@@ -543,7 +555,7 @@ class RenderStateMachine(threading.Thread):
 
                 # Debugging.log("density_diff_list:", density_diff_list)
 
-                # # Find the index of the maximum difference
+                # Find the index of the maximum difference
                 # if density_diff_list:
                 #     max_index = 0
                 #     max_element = density_diff_list[0]
@@ -642,21 +654,21 @@ class RenderStateMachine(threading.Thread):
                         
                 # average density methode: ----------------------------------------------------------------------------------------
                 
-                # density_sum = 0
-                # # first_iteration = True
-                # # previous_density = 0
-                # count = 0
-                # for density in ray_densities:
-                #     if density > 0:
-                #         count += 1
-                #         density_sum += density
+                density_sum = 0
+                # first_iteration = True
+                # previous_density = 0
+                count = 0
+                for density in ray_densities:
+                    if density > 0:
+                        count += 1
+                        density_sum += density
                 
-                # average_density = density_sum / count
+                average_density = density_sum / count
                 
-                # for location, density in zip(ray_locations, ray_densities):
-                #     if density > (average_density-self.density_threshold):
-                #         filtered_locations.append(location.tolist())
-                #         filtered_densities.append(density)
+                for location, density in zip(ray_locations, ray_densities):
+                    if density > (average_density-self.density_threshold):
+                        filtered_locations.append(location.tolist())
+                        filtered_densities.append(density)
                 
                 # average density difference methode: ----------------------------------------------------------------------------------------
                 
@@ -680,7 +692,7 @@ class RenderStateMachine(threading.Thread):
                 #     if density >= (average_density_difference_sum + self.density_threshold):
                 #         filtered_locations.append(location.tolist())
                 #         filtered_densities.append(density)
-                        # break
+                #         break
                     
         filtered_locations = torch.tensor(filtered_locations)
         filtered_densities = torch.tensor(filtered_densities)
@@ -716,7 +728,7 @@ class RenderStateMachine(threading.Thread):
             o3d.visualization.ViewControl() # type: ignore
             o3d.visualization.draw_geometries([point_cloud]) # type: ignore
         
-        if not plot_density and not clickable:
+        if not plot_density and not clickable and not showNearesDensity and not showSingelRayInf:
             if len(self.mesh_objs) > 0:
                 self.delete_point_cloud()
             
@@ -756,6 +768,47 @@ class RenderStateMachine(threading.Thread):
         obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO, density))
         
         self.mesh_objs.append(obj)
+        
+    def print_single_ray_informations(self, print_list):
+        self.csv_filename = 'single_ray_informations.csv'
+         # "id", "location", "distance", "density"
+        try:
+            print("try")
+            with open(self.csv_filename, 'x', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                headers = ["id", "location", "distance", "density"]
+                csvwriter.writerow(headers)
+        except FileExistsError:
+            pass
+        
+        print("for")
+        for i, info in enumerate(print_list):
+            with open(self.csv_filename, 'a', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                row = [self.ray_id] + info
+                csvwriter.writerow(row)
+        
+    def print_nearest_density(self, distance, density):
+        position = self.box.position.tolist() if isinstance(self.box.position, np.ndarray) else self.box.position
+        rot = [self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value]
+        
+        distance = float(distance) if isinstance(distance, float) else distance
+        density = density.item() if isinstance(density, torch.Tensor) else density
+        
+        self.csv_filename = 'ray_information.csv'
+        try:
+            with open(self.csv_filename, 'x', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                headers = ["id", "position_x", "position_y", "position_z", "rotation_x", "rotation_y", "rotation_z", "distance", "density"]
+                csvwriter.writerow(headers)
+        except FileExistsError:
+            pass
+        
+        print("id", type([self.ray_id]))
+        with open(self.csv_filename, 'a', newline='') as csvfile:
+            csvwriter = csv.writer(csvfile)
+            row = [self.ray_id] + position + rot + [distance, density]
+            csvwriter.writerow(row)
         
     def add_distance_modal(self, point, density):
         """ 
@@ -810,32 +863,6 @@ class RenderStateMachine(threading.Thread):
                 obj.visible = not obj.visible
             if obj._impl.name == "distance_label":
                 obj.visible = not obj.visible
-                
-    def save_ray_informations(self, distance, density):
-        position = self.box.position.tolist() if isinstance(self.box.position, np.ndarray) else self.box.position
-        rot = [self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value]
-        
-        distance = float(distance) if isinstance(distance, float) else distance
-        density = density.item() if isinstance(density, torch.Tensor) else density
-        
-        self.csv_filename = 'ray_information.csv'
-        try:
-            with open(self.csv_filename, 'x', newline='') as csvfile:
-                csvwriter = csv.writer(csvfile)
-                headers = ["id", "position_x", "position_y", "position_z", "rotation_x", "rotation_y", "rotation_z", "distance", "density"]
-                csvwriter.writerow(headers)
-        except FileExistsError:
-            pass
-        
-        print("id", type([self.ray_id]))
-        # print("position", type(position))
-        # print("rot", type(rot))
-        # print("distance", type(distance))
-        # print("density", type(density))
-        with open(self.csv_filename, 'a', newline='') as csvfile:
-            csvwriter = csv.writer(csvfile)
-            row = [self.ray_id] + position + rot + [distance, density]
-            csvwriter.writerow(row)
                 
     def compute_distance(self, a, b):
         """ 
