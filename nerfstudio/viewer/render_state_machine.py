@@ -102,6 +102,7 @@ class RenderStateMachine(threading.Thread):
         
         #-------------------------------------------------------------
         self.ray_id = 0
+        self.side_id = 0
         self.density_threshold = 0
         self.FOV = 60
         self.FOV_width = 1
@@ -306,9 +307,8 @@ class RenderStateMachine(threading.Thread):
             
         with self.viewer.viser_server.add_gui_folder("Density Options Box"):
             self.viewer.viser_server.add_gui_button("print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
-            self.viewer.viser_server.add_gui_button("print single ray inf.", color="red").on_click(lambda _: self._show_density(showSingelRayInf=True))
+            self.viewer.viser_server.add_gui_button("print single ray inf.", color="red").on_click(lambda _: self._scan_density())
             self.viewer.viser_server.add_gui_button("Take Screenshot", color="green").on_click(lambda _: self.take_screenshot())
-            self.viewer.viser_server.add_gui_button("New Ray Id", color="yellow").on_click(lambda _: self.increment_ray_id())
             self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
             self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
@@ -320,8 +320,11 @@ class RenderStateMachine(threading.Thread):
             self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 1, 1080, 1, 50)
             self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 1, 1920, 1, 50)
             self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
+            
+        with self.viewer.viser_server.add_gui_folder("ID Settings"):
+            self.ray_id_slider = self.viewer.viser_server.add_gui_slider("Ray ID", 0, 10000, 1, 0)
+            self.side_id_slider = self.viewer.viser_server.add_gui_slider("Side ID", 0, 10000, 1, 0)
 
-        
         self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
 
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
@@ -330,7 +333,7 @@ class RenderStateMachine(threading.Thread):
         with self.viewer.viser_server.add_gui_folder("Box Position"):
             self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 1)
             self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 1)
-            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.5)
+            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.9)
         
         with self.viewer.viser_server.add_gui_folder("Box WXYZ"):
             self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, -90)
@@ -343,6 +346,9 @@ class RenderStateMachine(threading.Thread):
         self.box_wxyz_x.on_update(lambda _: self.update_cube())
         self.box_wxyz_y.on_update(lambda _: self.update_cube())
         self.box_wxyz_z.on_update(lambda _: self.update_cube())
+        
+        self.ray_id_slider.on_update(lambda _: setattr(self, "ray_id", self.ray_id_slider.value))
+        self.side_id_slider.on_update(lambda _: setattr(self, "side_id", self.side_id_slider.value))
         
         self.threshold_slider.on_update(lambda _: setattr(self, "density_threshold", self.threshold_slider.value))
         self.box_fov.on_update(lambda _: setattr(self, "FOV", self.box_fov.value))
@@ -386,14 +392,78 @@ class RenderStateMachine(threading.Thread):
         self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
         self.box.position = (self.box_pos_x.value-x*self.frame_factor, self.box_pos_y.value-y*self.frame_factor, self.box_pos_z.value-z*self.frame_factor)
 
+    
+    def _scan_density(self) -> None:
         
+            print_list = []
+            for h in range(8):
+                for v in range(8):
+                    print(self.box.position)
+                    Rv = vtf.SO3(wxyz=self.box.wxyz)
+                    Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
+                    Rv = torch.tensor(Rv.as_matrix())
+                    origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+                    c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
+                    
+                    fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
+                    fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
+
+                    fx = torch.tensor([[fx_value]], device='cuda:0')
+                    fy = torch.tensor([[fy_value]], device='cuda:0')
+                    cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
+                    cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
+
+                    camera = Cameras(
+                        camera_to_worlds=c2w,
+                        fx=fx,
+                        fy=fy,
+                        cx=cx,
+                        cy=cy,
+                        width=torch.tensor([[self.FOV_width]]),
+                        height=torch.tensor([[self.FOV_height]]),
+                        distortion_params=None,
+                        camera_type=torch.tensor([[1]], device='cuda:0'),
+                        times=torch.tensor([[0.]], device='cuda:0')
+                    )
+
+                    assert isinstance(camera, Cameras)
+                    outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
+
+                    all_densities = []
+                    all_density_locations = []
+                        
+                    for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
+                        all_densities.append(densities)
+                        all_density_locations.append(locations) 
+                        
+
+                    all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
+                    all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
+
+
+                    for ray_locations, ray_densities in zip(all_density_locations, all_densities):
+                        for location, density in zip(ray_locations, ray_densities):
+                            density = density.item() if isinstance(density, torch.Tensor) else density
+                            if density >= 0.05:
+                                print_list.append([self.compute_distance(origin, location), density])
+                        x, y, z = self.box.position
+
+                    self.print_single_ray_informations(print_list)
+                    print_list.clear()
+                    self.box.position = x, y + 0.1, z
+                    self.ray_id += 1
+                x, y, z = self.box.position
+                self.box.position = x, y - 0.8, z - 0.1
+            self.side_id += 1
+        
+      
     def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False) -> None:
         """Show the density in the viewer
 
         Args:
             density_location: the density location
-        """ 
-        
+        """                   
+
         Rv = vtf.SO3(wxyz=self.box.wxyz)
         Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
         Rv = torch.tensor(Rv.as_matrix())
@@ -465,19 +535,7 @@ class RenderStateMachine(threading.Thread):
                     filtered_densities.append(density_current)
                     filtered_locations.append(location_current)
                     self.print_nearest_density(self.compute_distance(origin, location_current), density_current)
-                    
-            elif showSingelRayInf:
-                print_list = []
-                # "id", "location", "distance", "density"
-                for location, density in zip(ray_locations, ray_densities):
-                    density = density.item() if isinstance(density, torch.Tensor) else density
-                    if density > 0:
-                        print_list.append([location.tolist(), self.compute_distance(origin, location), density])
-                
-                self.print_single_ray_informations(print_list)
-                self.ray_id += 1
-                print("ray_id: ", self.ray_id)
-                break
+
             else:
             # standardized densities methode: -----------------------------------------------------------------------------------
             
@@ -771,21 +829,19 @@ class RenderStateMachine(threading.Thread):
         
     def print_single_ray_informations(self, print_list):
         self.csv_filename = 'single_ray_informations.csv'
-         # "id", "location", "distance", "density"
+         # "side id" "id", "location", "distance", "density"
         try:
-            print("try")
             with open(self.csv_filename, 'x', newline='') as csvfile:
                 csvwriter = csv.writer(csvfile)
-                headers = ["id", "location", "distance", "density"]
+                headers = ["side_id", "ray_id", "distance", "density"]
                 csvwriter.writerow(headers)
         except FileExistsError:
             pass
         
-        print("for")
         for i, info in enumerate(print_list):
             with open(self.csv_filename, 'a', newline='') as csvfile:
                 csvwriter = csv.writer(csvfile)
-                row = [self.ray_id] + info
+                row = [self.side_id] + [self.ray_id] + info
                 csvwriter.writerow(row)
         
     def print_nearest_density(self, distance, density):
