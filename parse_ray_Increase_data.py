@@ -3,10 +3,10 @@ import pandas as pd
 # CSV-Datei einlesen
 df = pd.read_csv('C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/single_ray_informations.csv')
 out_dir = 'C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/'
-file_name = 'result_single_ray_informations.csv'
+file_name ='single_ray_density_increase_result.csv'
 
 # Funktion zur Berechnung der nächsten Distance zu 1 und der zugehörigen Density
-def find_closest_to_one(group):
+def parse_ray_increase_data(group):
     closest_row = group.iloc[(group['distance'] - 1).abs().argsort()[:1]]
     closest_distance = closest_row['distance'].values[0]
     closest_density = closest_row['density'].values[0]
@@ -33,7 +33,7 @@ def find_closest_to_one(group):
     return result_dict
 
 # Anwendung der Funktion auf die Gruppen
-result = df.groupby('ray_id').apply(find_closest_to_one).reset_index()
+result = df.groupby('ray_id').apply(parse_ray_increase_data).reset_index()
 
 # Konvertierung des Ergebnisses in ein DataFrame
 result_df = pd.json_normalize(result[0]) #type: ignore

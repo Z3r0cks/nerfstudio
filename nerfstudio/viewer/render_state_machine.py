@@ -454,10 +454,10 @@ class RenderStateMachine(threading.Thread):
 
                         for ray_locations, ray_densities, rgb in zip(all_density_locations, all_densities, all_rgbs):
                             for location, density in zip(ray_locations, ray_densities):
-                                if density >= 0.05:
-                                    rgblist_normalized = rgb.tolist()
-                                    rgblist = [int(val * 255) for val in rgblist_normalized]
-                                    print_list.append([self.compute_distance(origin, location), density.item(), rgblist])
+                                # if density >= 0.05:
+                                rgblist_normalized = rgb.tolist()
+                                rgblist = [int(val * 255) for val in rgblist_normalized]
+                                print_list.append([self.compute_distance(origin, location), density.item(), rgblist])
                             x, y, z = self.box.position #type: ignore
 
                         self.print_single_ray_informations(print_list)
@@ -592,21 +592,20 @@ class RenderStateMachine(threading.Thread):
                 # max_density = torch.max(ray_densities)
                 # normalized_densities = (ray_densities - min_density) / (max_density - min_density + 1e-8)  # +1e-8 um Division durch 0 zu vermeiden
                     
-                # first_iteration = True
-                # density_differece = 0
-                # previous_density = 0
-                # for location, density in zip(ray_locations, ray_densities):
-                #     if first_iteration:
-                #         first_iteration = False
-                #         previous_density = density
-                #         continue
-                #     if not first_iteration:
-                #         density_differece = abs(density - previous_density)
-                #     if not first_iteration and density_differece > self.density_threshold:
-                #         filtered_locations.append(location.tolist())
-                #         filtered_densities.append(density)
-                #         break
-        
+                first_iteration = True
+                density_differece = 0
+                previous_density = 0
+                for location, density in zip(ray_locations, ray_densities):
+                    if first_iteration:
+                        first_iteration = False
+                        previous_density = density
+                        continue
+                    if not first_iteration:
+                        density_differece = abs(density - previous_density)
+                    if not first_iteration and density_differece > self.density_threshold:
+                        filtered_locations.append(location.tolist())
+                        filtered_densities.append(density)
+                        break
 
                 # largest density difference methode: ---------------------------------------------------------------------
                 
@@ -724,21 +723,21 @@ class RenderStateMachine(threading.Thread):
                         
                 # average density methode: ----------------------------------------------------------------------------------------
                 
-                density_sum = 0
-                # first_iteration = True
-                # previous_density = 0
-                count = 0
-                for density in ray_densities:
-                    if density > 0:
-                        count += 1
-                        density_sum += density
+                # density_sum = 0
+                # # first_iteration = True
+                # # previous_density = 0
+                # count = 0
+                # for density in ray_densities:
+                #     if density > 0:
+                #         count += 1
+                #         density_sum += density
                 
-                average_density = density_sum / count
+                # average_density = density_sum / count
                 
-                for location, density in zip(ray_locations, ray_densities):
-                    if density > (average_density-self.density_threshold):
-                        filtered_locations.append(location.tolist())
-                        filtered_densities.append(density)
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if density > (average_density-self.density_threshold):
+                #         filtered_locations.append(location.tolist())
+                #         filtered_densities.append(density)
                 
                 # average density difference methode: ----------------------------------------------------------------------------------------
                 
