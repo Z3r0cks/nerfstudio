@@ -394,67 +394,79 @@ class RenderStateMachine(threading.Thread):
 
     
     def _scan_density(self) -> None:
-        
             print_list = []
-            for h in range(8):
-                for v in range(8):
-                    print(self.box.position)
-                    Rv = vtf.SO3(wxyz=self.box.wxyz)
-                    Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
-                    Rv = torch.tensor(Rv.as_matrix())
-                    origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
-                    c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
+            x_t, y_t, z_t = self.translate_pos_from_omnivers
+            
+            for side in range(4):
+                if side == 0:
+                    self.box.position = 1 - x_t, 1.1 - y_t, 1.9 - z_t
+                elif side == 1:
+                    self.box.position = 1 - x_t, 1.1 - y_t, 0.9 - z_t
+                elif side == 2:
+                    self.box.position = 4 - x_t, -5.9 - y_t, 1.9 - z_t
+                else:
+                    self.box.position = 4 - x_t, -5.9 - y_t, 0.9 - z_t
                     
-                    fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
-                    fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
-
-                    fx = torch.tensor([[fx_value]], device='cuda:0')
-                    fy = torch.tensor([[fy_value]], device='cuda:0')
-                    cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
-                    cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
-
-                    camera = Cameras(
-                        camera_to_worlds=c2w,
-                        fx=fx,
-                        fy=fy,
-                        cx=cx,
-                        cy=cy,
-                        width=torch.tensor([[self.FOV_width]]),
-                        height=torch.tensor([[self.FOV_height]]),
-                        distortion_params=None,
-                        camera_type=torch.tensor([[1]], device='cuda:0'),
-                        times=torch.tensor([[0.]], device='cuda:0')
-                    )
-
-                    assert isinstance(camera, Cameras)
-                    outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
-
-                    all_densities = []
-                    all_density_locations = []
+                for horizont in range(8):
+                    for vertical in range(8):
+                        Rv = vtf.SO3(wxyz=self.box.wxyz)
+                        Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
+                        Rv = torch.tensor(Rv.as_matrix())
+                        origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+                        c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
                         
-                    for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
-                        all_densities.append(densities)
-                        all_density_locations.append(locations) 
-                        
+                        fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
+                        fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
 
-                    all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
-                    all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
+                        fx = torch.tensor([[fx_value]], device='cuda:0')
+                        fy = torch.tensor([[fy_value]], device='cuda:0')
+                        cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
+                        cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
 
+                        camera = Cameras(
+                            camera_to_worlds=c2w,
+                            fx=fx,
+                            fy=fy,
+                            cx=cx,
+                            cy=cy,
+                            width=torch.tensor([[self.FOV_width]]),
+                            height=torch.tensor([[self.FOV_height]]),
+                            distortion_params=None,
+                            camera_type=torch.tensor([[1]], device='cuda:0'),
+                            times=torch.tensor([[0.]], device='cuda:0')
+                        )
 
-                    for ray_locations, ray_densities in zip(all_density_locations, all_densities):
-                        for location, density in zip(ray_locations, ray_densities):
-                            density = density.item() if isinstance(density, torch.Tensor) else density
-                            if density >= 0.05:
-                                print_list.append([self.compute_distance(origin, location), density])
-                        x, y, z = self.box.position
+                        assert isinstance(camera, Cameras)
+                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
 
-                    self.print_single_ray_informations(print_list)
-                    print_list.clear()
-                    self.box.position = x, y + 0.1, z
-                    self.ray_id += 1
-                x, y, z = self.box.position
-                self.box.position = x, y - 0.8, z - 0.1
-            self.side_id += 1
+                        all_densities = []
+                        all_density_locations = []
+                        all_rgbs = []
+                            
+                        for densities, locations, rgb in zip(outputs["densities"], outputs["densities_locations"], outputs["rgb"]):
+                            all_densities.append(densities)
+                            all_density_locations.append(locations)
+                            all_rgbs.append(rgb)
+
+                        all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
+                        all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
+                        all_rgbs = torch.cat([ray_rgbs for ray_rgbs in all_rgbs if ray_rgbs.numel() > 0])
+
+                        for ray_locations, ray_densities, rgb in zip(all_density_locations, all_densities, all_rgbs):
+                            for location, density in zip(ray_locations, ray_densities):
+                                if density >= 0.05:
+                                    rgblist_normalized = rgb.tolist()
+                                    rgblist = [int(val * 255) for val in rgblist_normalized]
+                                    print_list.append([self.compute_distance(origin, location), density.item(), rgblist])
+                            x, y, z = self.box.position #type: ignore
+
+                        self.print_single_ray_informations(print_list)
+                        print_list.clear()
+                        self.box.position = x, y + 0.1, z #type: ignore
+                        self.ray_id += 1
+                    x, y, z = self.box.position #type: ignore
+                    self.box.position = x, y - 0.8, z - 0.1
+                self.side_id += 1
         
       
     def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False) -> None:
@@ -829,11 +841,11 @@ class RenderStateMachine(threading.Thread):
         
     def print_single_ray_informations(self, print_list):
         self.csv_filename = 'single_ray_informations.csv'
-         # "side id" "id", "location", "distance", "density"
+         # "side id" "id", "location", "distance", "density", rgb
         try:
             with open(self.csv_filename, 'x', newline='') as csvfile:
                 csvwriter = csv.writer(csvfile)
-                headers = ["side_id", "ray_id", "distance", "density"]
+                headers = ["side_id", "ray_id", "distance", "density", "rgb"]
                 csvwriter.writerow(headers)
         except FileExistsError:
             pass
