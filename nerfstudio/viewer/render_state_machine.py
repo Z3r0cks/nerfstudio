@@ -105,8 +105,8 @@ class RenderStateMachine(threading.Thread):
         self.side_id = 0
         self.density_threshold = 0
         self.FOV = 60
-        self.FOV_width = 1
-        self.FOV_height = 1
+        self.width = 1
+        self.height = 2
         self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
@@ -300,15 +300,16 @@ class RenderStateMachine(threading.Thread):
             )
         self.ray_id
         with self.viewer.viser_server.add_gui_folder("Camera Options"):
-            self.viewer.viser_server.add_gui_button("Viser Camera To Box", color="violet").on_click(lambda _: self.set_camera_box("viser_box"))
-            self.viewer.viser_server.add_gui_button("Box To Viser Camera", color="violet").on_click(lambda _: self.set_camera_box(""))
-            # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods("box_nerf"))
-            # self.viewer.viser_server.add_gui_button("Box To Nerf Camera", color="violet").on_click(lambda _: self.get_camera_coods())
+            self.viewer.viser_server.add_gui_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
+            self.viewer.viser_server.add_gui_button("Perspectiv To Viser Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
             
-        with self.viewer.viser_server.add_gui_folder("Density Options Box"):
-            self.viewer.viser_server.add_gui_button("print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
-            self.viewer.viser_server.add_gui_button("print single ray inf.", color="red").on_click(lambda _: self._scan_density())
-            self.viewer.viser_server.add_gui_button("Take Screenshot", color="green").on_click(lambda _: self.take_screenshot())
+        with self.viewer.viser_server.add_gui_folder("Debugging"):
+            self.viewer.viser_server.add_gui_button("Show all samples per ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
+            self.viewer.viser_server.add_gui_button("Print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
+            self.viewer.viser_server.add_gui_button("Print single ray inf.", color="red").on_click(lambda _: self._scan_density())
+            self.viewer.viser_server.add_gui_button("Take screenshot", color="green").on_click(lambda _: self.take_screenshot())
+            
+        with self.viewer.viser_server.add_gui_folder("Density Options"):
             self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
             self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
             self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
@@ -316,45 +317,45 @@ class RenderStateMachine(threading.Thread):
             self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
             
         with self.viewer.viser_server.add_gui_folder("Density Settings"):
-            self.box_fov = self.viewer.viser_server.add_gui_slider("Box FOV", 0, 360, 1, 60)
-            self.box_heigth = self.viewer.viser_server.add_gui_slider("Box Height", 1, 1080, 1, 50)
-            self.box_width = self.viewer.viser_server.add_gui_slider("Box Width", 1, 1920, 1, 50)
-            self.box_pa = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
+            self.perspectiv_fov = self.viewer.viser_server.add_gui_slider("Perspectiv FOV", 0, 360, 1, 30)
+            self.perspectiv_heigth = self.viewer.viser_server.add_gui_slider("Perspectiv Height", 1, 5000, 1, 1)
+            self.perspectiv_width = self.viewer.viser_server.add_gui_slider("Perspectiv Width", 1, 5000, 1, 2)
+            self.perspectiv_pixel_area = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
             
         with self.viewer.viser_server.add_gui_folder("ID Settings"):
             self.ray_id_slider = self.viewer.viser_server.add_gui_slider("Ray ID", 0, 10000, 1, 0)
             self.side_id_slider = self.viewer.viser_server.add_gui_slider("Side ID", 0, 10000, 1, 0)
 
-        self.box = self.viewer.viser_server.add_camera_frustum(name="box", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
+        self.box = self.viewer.viser_server.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(-x_omni*self.frame_factor, -y_omni*self.frame_factor, -z_omni*self.frame_factor))
 
         with self.viewer.viser_server.add_gui_folder("Density Threshold"):
             self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -1000000, 1000000, 0.001, 0)
             
-        with self.viewer.viser_server.add_gui_folder("Box Position"):
-            self.box_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 1)
-            self.box_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 1)
-            self.box_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.9)
+        with self.viewer.viser_server.add_gui_folder("Perspectiv Position"):
+            self.perspectiv_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 1)
+            self.perspectiv_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 1)
+            self.perspectiv_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.5)
         
-        with self.viewer.viser_server.add_gui_folder("Box WXYZ"):
-            self.box_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, -90)
-            self.box_wxyz_y = self.viewer.viser_server.add_gui_slider("Rot Y", -180, 180, 0.1, 0)
-            self.box_wxyz_z = self.viewer.viser_server.add_gui_slider("Rot Z", -180, 180, 0.1, 90)
+        with self.viewer.viser_server.add_gui_folder("Perspectiv Orientation"):
+            self.perspectiv_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, -90)
+            self.perspectiv_wxyz_y = self.viewer.viser_server.add_gui_slider("Rot Y", -180, 180, 0.1, 0)
+            self.perspectiv_wxyz_z = self.viewer.viser_server.add_gui_slider("Rot Z", -180, 180, 0.1, 90)
               
-        self.box_pos_x.on_update(lambda _: self.update_cube())
-        self.box_pos_y.on_update(lambda _: self.update_cube())
-        self.box_pos_z.on_update(lambda _: self.update_cube())
-        self.box_wxyz_x.on_update(lambda _: self.update_cube())
-        self.box_wxyz_y.on_update(lambda _: self.update_cube())
-        self.box_wxyz_z.on_update(lambda _: self.update_cube())
+        self.perspectiv_pos_x.on_update(lambda _: self.update_cube())
+        self.perspectiv_pos_y.on_update(lambda _: self.update_cube())
+        self.perspectiv_pos_z.on_update(lambda _: self.update_cube())
+        self.perspectiv_wxyz_x.on_update(lambda _: self.update_cube())
+        self.perspectiv_wxyz_y.on_update(lambda _: self.update_cube())
+        self.perspectiv_wxyz_z.on_update(lambda _: self.update_cube())
         
         self.ray_id_slider.on_update(lambda _: setattr(self, "ray_id", self.ray_id_slider.value))
         self.side_id_slider.on_update(lambda _: setattr(self, "side_id", self.side_id_slider.value))
         
         self.threshold_slider.on_update(lambda _: setattr(self, "density_threshold", self.threshold_slider.value))
-        self.box_fov.on_update(lambda _: setattr(self, "FOV", self.box_fov.value))
-        self.box_heigth.on_update(lambda _: setattr(self, "FOV_height", self.box_heigth.value))
-        self.box_width.on_update(lambda _: setattr(self, "FOV_width", self.box_width.value))
-        self.box_pa.on_update(lambda _: setattr(self, "pixel_area", self.box_pa.value))
+        self.perspectiv_fov.on_update(lambda _: setattr(self, "FOV", self.perspectiv_fov.value))
+        self.perspectiv_heigth.on_update(lambda _: setattr(self, "height", self.perspectiv_heigth.value))
+        self.perspectiv_width.on_update(lambda _: setattr(self, "width", self.perspectiv_width.value))
+        self.perspectiv_pixel_area.on_update(lambda _: setattr(self, "pixel_area", self.perspectiv_pixel_area.value))
 
     def take_screenshot(self):
         import pyautogui
@@ -389,8 +390,8 @@ class RenderStateMachine(threading.Thread):
     
     def update_cube(self):
         x, y, z = self.translate_pos_from_omnivers
-        self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
-        self.box.position = (self.box_pos_x.value-x*self.frame_factor, self.box_pos_y.value-y*self.frame_factor, self.box_pos_z.value-z*self.frame_factor)
+        self.box.wxyz = R.from_euler('xyz', [self.perspectiv_wxyz_x.value, self.perspectiv_wxyz_y.value, self.perspectiv_wxyz_z.value], degrees=True).as_quat()
+        self.box.position = (self.perspectiv_pos_x.value-x*self.frame_factor, self.perspectiv_pos_y.value-y*self.frame_factor, self.perspectiv_pos_z.value-z*self.frame_factor)
 
     
     def _scan_density(self) -> None:
@@ -415,13 +416,13 @@ class RenderStateMachine(threading.Thread):
                         origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
                         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
                         
-                        fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
-                        fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
+                        fx_value = self.width / (2 * math.tan(math.radians(self.FOV / 2)))
+                        fy_value = self.height / (2 * math.tan(math.radians(self.FOV / 2)))
 
                         fx = torch.tensor([[fx_value]], device='cuda:0')
                         fy = torch.tensor([[fy_value]], device='cuda:0')
-                        cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
-                        cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
+                        cx = torch.tensor([[self.width/2]], device='cuda:0')
+                        cy = torch.tensor([[self.height/2]], device='cuda:0')
 
                         camera = Cameras(
                             camera_to_worlds=c2w,
@@ -429,15 +430,15 @@ class RenderStateMachine(threading.Thread):
                             fy=fy,
                             cx=cx,
                             cy=cy,
-                            width=torch.tensor([[self.FOV_width]]),
-                            height=torch.tensor([[self.FOV_height]]),
+                            width=torch.tensor([[self.width]]),
+                            height=torch.tensor([[self.height]]),
                             distortion_params=None,
                             camera_type=torch.tensor([[1]], device='cuda:0'),
                             times=torch.tensor([[0.]], device='cuda:0')
                         )
-
+                        
                         assert isinstance(camera, Cameras)
-                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
+                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.width, height=self.height)
 
                         all_densities = []
                         all_density_locations = []
@@ -469,7 +470,7 @@ class RenderStateMachine(threading.Thread):
                 self.side_id += 1
         
       
-    def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False) -> None:
+    def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False, debugging = False) -> None:
         """Show the density in the viewer
 
         Args:
@@ -482,13 +483,13 @@ class RenderStateMachine(threading.Thread):
         origin = torch.tensor(self.box.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
         
-        fx_value = self.FOV_width / (2 * math.tan(math.radians(self.FOV / 2)))
-        fy_value = self.FOV_height / (2 * math.tan(math.radians(self.FOV / 2)))
+        fx_value = self.width / (2 * math.tan(math.radians(self.FOV / 2)))
+        fy_value = self.height / (2 * math.tan(math.radians(self.FOV / 2)))
 
         fx = torch.tensor([[fx_value]], device='cuda:0')
         fy = torch.tensor([[fy_value]], device='cuda:0')
-        cx = torch.tensor([[self.FOV_width/2]], device='cuda:0')
-        cy = torch.tensor([[self.FOV_height/2]], device='cuda:0')
+        cx = torch.tensor([[self.width/2]], device='cuda:0')
+        cy = torch.tensor([[self.height/2]], device='cuda:0')
 
         camera = Cameras(
             camera_to_worlds=c2w,
@@ -496,15 +497,15 @@ class RenderStateMachine(threading.Thread):
             fy=fy,
             cx=cx,
             cy=cy,
-            width=torch.tensor([[self.FOV_width]]),
-            height=torch.tensor([[self.FOV_height]]),
+            width=torch.tensor([[self.width]]),
+            height=torch.tensor([[self.height]]),
             distortion_params=None,
             camera_type=torch.tensor([[1]], device='cuda:0'),
             times=torch.tensor([[0.]], device='cuda:0')
         )
 
         assert isinstance(camera, Cameras)
-        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.FOV_width, height=self.FOV_height)
+        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=None, width=self.width, height=self.height)
 
         # Extrahiere die Dichtewerte und Dichtepositionen
         all_densities = []
@@ -514,7 +515,6 @@ class RenderStateMachine(threading.Thread):
             all_densities.append(densities)
             all_density_locations.append(locations) 
             
-
         # filtered_locations = torch.tensor([])
         filtered_locations = []
         filtered_densities = []
@@ -547,7 +547,10 @@ class RenderStateMachine(threading.Thread):
                     filtered_densities.append(density_current)
                     filtered_locations.append(location_current)
                     self.print_nearest_density(self.compute_distance(origin, location_current), density_current)
-
+            elif debugging:
+                    for location, density in zip(ray_locations, ray_densities):
+                        filtered_locations.append(location.tolist())   
+                        filtered_densities.append(density) 
             else:
             # standardized densities methode: -----------------------------------------------------------------------------------
             
@@ -571,13 +574,6 @@ class RenderStateMachine(threading.Thread):
                 #         filtered_locations.append(location.tolist())    
                 #         break
                     
-            # multiple points theshold methode: ------------------------------------------------------------------------------------------------
-                
-                # for location, density in zip(ray_locations, ray_densities):
-                #     # if density > self.density_threshold:
-                #     filtered_locations.append(location.tolist())   
-                #     filtered_densities.append(density) 
-                    
             # single point theshold methode: ------------------------------------------------------------------------------------------------
                 
                 # for location, density in zip(ray_locations, ray_densities):
@@ -586,7 +582,7 @@ class RenderStateMachine(threading.Thread):
                 #         filtered_densities.append(density) 
                 #         break
             
-            # difference methode: ----------------------------------------------------------------------------------------------
+            # difference methode (current): ----------------------------------------------------------------------------------------------
                 # normalized densities:
                 # min_density = torch.min(ray_densities)
                 # max_density = torch.max(ray_densities)
@@ -857,7 +853,7 @@ class RenderStateMachine(threading.Thread):
         
     def print_nearest_density(self, distance, density):
         position = self.box.position.tolist() if isinstance(self.box.position, np.ndarray) else self.box.position
-        rot = [self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value]
+        rot = [self.perspectiv_pos_x.value, self.perspectiv_pos_y.value, self.perspectiv_pos_z.value]
         
         distance = float(distance) if isinstance(distance, float) else distance
         density = density.item() if isinstance(density, torch.Tensor) else density
@@ -976,11 +972,11 @@ class RenderStateMachine(threading.Thread):
             T.append(T_i)
         return T
     
-    def set_camera_box(self, type: str):
+    def set_perspectiv_camera(self, type: str):
         
         clients = self.viewer.viser_server.get_clients()
         for id, client in clients.items():
-            if type == "viser_box":
+            if type == "viser_perspectiv":
                 client.camera.position = self.box.position
                 client.camera.wxyz = self.box.wxyz
             else:
@@ -988,12 +984,12 @@ class RenderStateMachine(threading.Thread):
                 self.box.wxyz = client.camera.wxyz
                 x, y, z = self.box.position
                 q_x, q_y, q_z = R.from_quat(self.box.wxyz).as_euler('xyz', degrees=True)
-                self.box_pos_x.value = x
-                self.box_pos_y.value = y
-                self.box_pos_z.value = z
-                self.box_wxyz_x.value = q_x
-                self.box_wxyz_y.value = q_y
-                self.box_wxyz_z.value = q_z
+                self.perspectiv_pos_x.value = x
+                self.perspectiv_pos_y.value = y
+                self.perspectiv_pos_z.value = z
+                self.perspectiv_wxyz_x.value = q_x
+                self.perspectiv_wxyz_y.value = q_y
+                self.perspectiv_wxyz_z.value = q_z
 
  
     def delete_point_cloud(self):

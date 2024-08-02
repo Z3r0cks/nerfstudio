@@ -170,13 +170,13 @@ class Model(nn.Module):
             camera: generates raybundle
         """ 
         
+        
         if (kwargs.get("pixel_area") is None):
             return self.get_outputs_for_camera_ray_bundle(
                 camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
             )
             
         else:
-            from nerfstudio.utils.debugging import Debugging as db
             ray = camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
             shape = [kwargs.get("width"), kwargs.get("height"), 1]
             pixel_area = torch.full(shape, int(kwargs.get("pixel_area") or 1), dtype=torch.float32)

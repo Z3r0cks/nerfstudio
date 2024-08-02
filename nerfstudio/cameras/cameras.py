@@ -620,6 +620,13 @@ class Cameras(TensorDataclass):
 
         # Get our image coordinates and image coordinates offset by 1 (offsets used for dx, dy calculations)
         # Also make sure the shapes are correct
+        # Debugging.log("cameras", "--------------------------------------------------------")
+        # Debugging.log("x coord", x)
+        # Debugging.log("y coord", y)
+        # Debugging.log("fx", fx)
+        # Debugging.log("fy", fy)
+        # Debugging.log("cx", cx)
+        # Debugging.log("cy", cy)
         coord = torch.stack([(x - cx) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_x_offset = torch.stack([(x - cx + 1) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_y_offset = torch.stack([(x - cx) / fx, (y - cy + 1) / fy], -1)  # (num_rays, 2)
@@ -666,7 +673,7 @@ class Cameras(TensorDataclass):
         # directions_stack[2] is the direction for ray in camera coordinates offset by 1 in y
         cam_types = torch.unique(self.camera_type, sorted=False)
         directions_stack = torch.empty((3,) + num_rays_shape + (3,), device=self.device)
-
+        
         c2w = self.camera_to_worlds[true_indices]
         assert c2w.shape == num_rays_shape + (3, 4)
 
@@ -681,6 +688,7 @@ class Cameras(TensorDataclass):
             Returns:
                 A tuple containing the origins and the directions of the rays.
             """
+
             # Directions calculated similarly to equirectangular
             ods_cam_type = (
                 CameraType.OMNIDIRECTIONALSTEREO_R.value if eye == "right" else CameraType.OMNIDIRECTIONALSTEREO_L.value
@@ -778,11 +786,13 @@ class Cameras(TensorDataclass):
             c2w[..., :3, 3] = vr180_origins
 
             return vr180_origins, directions_stack
-
+        
         for cam in cam_types:
             if CameraType.PERSPECTIVE.value in cam_types:
+                
                 mask = (self.camera_type[true_indices] == CameraType.PERSPECTIVE.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
+
                 directions_stack[..., 0][mask] = torch.masked_select(coord_stack[..., 0], mask).float()
                 directions_stack[..., 1][mask] = torch.masked_select(coord_stack[..., 1], mask).float()
                 directions_stack[..., 2][mask] = -1.0
@@ -889,7 +899,7 @@ class Cameras(TensorDataclass):
             c2w = pose_utils.multiply(c2w, camera_opt_to_camera)
         rotation = c2w[..., :3, :3]  # (..., 3, 3)
         assert rotation.shape == num_rays_shape + (3, 3)
-
+    
         directions_stack = torch.sum(
             directions_stack[..., None, :] * rotation, dim=-1
         )  # (..., 1, 3) * (..., 3, 3) -> (..., 3)
@@ -919,7 +929,14 @@ class Cameras(TensorDataclass):
             metadata["directions_norm"] = directions_norm[0].detach()
         else:
             metadata = {"directions_norm": directions_norm[0].detach()}
-
+        
+        # Debugging.log("origins", origins)
+        # Debugging.log("directions", directions)
+        # Debugging.log("pixel_area", pixel_area)
+        # Debugging.log("camera_indices", camera_indices)
+        # Debugging.log("times", times)
+        # Debugging.log("metadata", metadata)
+        
         return RayBundle(
             origins=origins,
             directions=directions,

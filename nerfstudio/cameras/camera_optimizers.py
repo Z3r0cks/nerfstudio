@@ -122,7 +122,6 @@ class CameraOptimizer(nn.Module):
             to given camera coordinates.
         """
         outputs = []
-
         # Apply learned transformation delta.
         self.config.mode = "off"
         if self.config.mode == "off":
