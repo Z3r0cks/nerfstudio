@@ -105,8 +105,8 @@ class RenderStateMachine(threading.Thread):
         self.side_id = 0
         self.density_threshold = 0
         self.FOV = 60
-        self.width = 1
-        self.height = 2
+        self.width = 2
+        self.height = 1
         self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
@@ -476,7 +476,6 @@ class RenderStateMachine(threading.Thread):
         Args:
             density_location: the density location
         """                   
-
         Rv = vtf.SO3(wxyz=self.box.wxyz)
         Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
         Rv = torch.tensor(Rv.as_matrix())
@@ -490,7 +489,7 @@ class RenderStateMachine(threading.Thread):
         fy = torch.tensor([[fy_value]], device='cuda:0')
         cx = torch.tensor([[self.width/2]], device='cuda:0')
         cy = torch.tensor([[self.height/2]], device='cuda:0')
-        # test
+
         camera = Cameras(
             camera_to_worlds=c2w,
             fx=fx,
@@ -883,8 +882,8 @@ class RenderStateMachine(threading.Thread):
         global global_density
         global_distance = self.compute_distance(self.box.position, point)
         global_density = density
-        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.5f} m", (1, 0, 0, 0), (x - 0.02, y, z + 0.05))
-        destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.06))
+        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.5f} m", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
+        destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.08))
         
         # distance_label.label_size = 0.1
         # distance_ray = self.viewer.viser_server.add_gui_modal("Distance")

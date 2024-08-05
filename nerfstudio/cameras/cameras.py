@@ -627,6 +627,7 @@ class Cameras(TensorDataclass):
         # Debugging.log("fy", fy)
         # Debugging.log("cx", cx)
         # Debugging.log("cy", cy)
+        
         coord = torch.stack([(x - cx) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_x_offset = torch.stack([(x - cx + 1) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_y_offset = torch.stack([(x - cx) / fx, (y - cy + 1) / fy], -1)  # (num_rays, 2)
@@ -635,9 +636,10 @@ class Cameras(TensorDataclass):
             and coord_x_offset.shape == num_rays_shape + (2,)
             and coord_y_offset.shape == num_rays_shape + (2,)
         )
-
+        
         # Stack image coordinates and image coordinates offset by 1, check shapes too
         coord_stack = torch.stack([coord, coord_x_offset, coord_y_offset], dim=0)  # (3, num_rays, 2)
+        # Debugging.log("coord_stack 0", coord_stack)
         assert coord_stack.shape == (3,) + num_rays_shape + (2,)
 
         # Undistorts our images according to our distortion parameters
@@ -659,7 +661,7 @@ class Cameras(TensorDataclass):
                         coord_stack[coord_mask, :].reshape(3, -1, 2),
                         distortion_params[mask, :],
                     ).reshape(-1, 2)
-
+                    
         # Switch from OpenCV to OpenGL
         coord_stack[..., 1] *= -1
 
@@ -789,13 +791,14 @@ class Cameras(TensorDataclass):
         
         for cam in cam_types:
             if CameraType.PERSPECTIVE.value in cam_types:
-                
+                # Debugging.log("coord_stack", coord_stack)
                 mask = (self.camera_type[true_indices] == CameraType.PERSPECTIVE.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
 
                 directions_stack[..., 0][mask] = torch.masked_select(coord_stack[..., 0], mask).float()
                 directions_stack[..., 1][mask] = torch.masked_select(coord_stack[..., 1], mask).float()
                 directions_stack[..., 2][mask] = -1.0
+                # Debugging.log("directions 1", directions_stack[0])
 
             elif CameraType.FISHEYE.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.FISHEYE.value).squeeze(-1)  # (num_rays)
@@ -899,16 +902,19 @@ class Cameras(TensorDataclass):
             c2w = pose_utils.multiply(c2w, camera_opt_to_camera)
         rotation = c2w[..., :3, :3]  # (..., 3, 3)
         assert rotation.shape == num_rays_shape + (3, 3)
-    
+        
         directions_stack = torch.sum(
             directions_stack[..., None, :] * rotation, dim=-1
         )  # (..., 1, 3) * (..., 3, 3) -> (..., 3)
+        # Debugging.log("directions 2", directions_stack[0])
         directions_stack, directions_norm = camera_utils.normalize_with_norm(directions_stack, -1)
         assert directions_stack.shape == (3,) + num_rays_shape + (3,)
 
         origins = c2w[..., :3, 3]  # (..., 3)
         assert origins.shape == num_rays_shape + (3,)
 
+        # Debugging.log("directions", directions_stack[0])
+        
         directions = directions_stack[0]
         assert directions.shape == num_rays_shape + (3,)
 
