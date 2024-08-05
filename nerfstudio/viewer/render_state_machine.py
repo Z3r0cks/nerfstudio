@@ -490,7 +490,7 @@ class RenderStateMachine(threading.Thread):
         fy = torch.tensor([[fy_value]], device='cuda:0')
         cx = torch.tensor([[self.width/2]], device='cuda:0')
         cy = torch.tensor([[self.height/2]], device='cuda:0')
-
+        # test
         camera = Cameras(
             camera_to_worlds=c2w,
             fx=fx,
