@@ -407,7 +407,6 @@ class RenderStateMachine(threading.Thread):
                     self.box.position = 4 - x_t, -5.9 - y_t, 1.9 - z_t
                 else:
                     self.box.position = 4 - x_t, -5.9 - y_t, 0.9 - z_t
-                    
                 for horizont in range(8):
                     for vertical in range(8):
                         Rv = vtf.SO3(wxyz=self.box.wxyz)
@@ -436,7 +435,6 @@ class RenderStateMachine(threading.Thread):
                             camera_type=torch.tensor([[1]], device='cuda:0'),
                             times=torch.tensor([[0.]], device='cuda:0')
                         )
-                        
                         assert isinstance(camera, Cameras)
                         outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.width, height=self.height)
 
@@ -452,22 +450,37 @@ class RenderStateMachine(threading.Thread):
                         all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
                         all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
                         all_rgbs = torch.cat([ray_rgbs for ray_rgbs in all_rgbs if ray_rgbs.numel() > 0])
-
+                        
                         for ray_locations, ray_densities, rgb in zip(all_density_locations, all_densities, all_rgbs):
                             for location, density in zip(ray_locations, ray_densities):
-                                # if density >= 0.05:
                                 rgblist_normalized = rgb.tolist()
                                 rgblist = [int(val * 255) for val in rgblist_normalized]
                                 print_list.append([self.compute_distance(origin, location), density.item(), rgblist])
+                            self.print_single_ray_informations(print_list)
+                            print_list.clear()
+                            self.ray_id += 1
                             x, y, z = self.box.position #type: ignore
-
-                        self.print_single_ray_informations(print_list)
-                        print_list.clear()
                         self.box.position = x, y + 0.1, z #type: ignore
-                        self.ray_id += 1
                     x, y, z = self.box.position #type: ignore
                     self.box.position = x, y - 0.8, z - 0.1
                 self.side_id += 1
+                
+    def print_single_ray_informations(self, print_list):
+        self.csv_filename = 'single_ray_informations.csv'
+            # "side id" "id", "location", "distance", "density", rgb
+        try:
+            with open(self.csv_filename, 'x', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                headers = ["side_id", "ray_id", "distance", "density", "rgb"]
+                csvwriter.writerow(headers)
+        except FileExistsError:
+            pass
+        
+        for i, info in enumerate(print_list):
+            with open(self.csv_filename, 'a', newline='') as csvfile:
+                csvwriter = csv.writer(csvfile)
+                row = [self.side_id] + [self.ray_id] + info
+                csvwriter.writerow(row)
         
       
     def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False, debugging = False) -> None:
@@ -511,17 +524,16 @@ class RenderStateMachine(threading.Thread):
         all_density_locations = []
             
         for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
-            all_densities.append(densities)
-            all_density_locations.append(locations) 
-            
-        # filtered_locations = torch.tensor([])
+            if densities.numel() > 0:
+                all_densities.append(densities)
+            if locations.numel() > 0:
+                all_density_locations.append(locations)
+                
+        all_densities = torch.cat(all_densities)
+        all_density_locations = torch.cat(all_density_locations)
+                
         filtered_locations = []
         filtered_densities = []
-
-        # Berechne globalen Mittelwert und Standardabweichung über alle Dichtewerte
-        all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
-        all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
-
 
         for ray_locations, ray_densities in zip(all_density_locations, all_densities):
             if ray_densities.numel() == 0:
@@ -551,6 +563,30 @@ class RenderStateMachine(threading.Thread):
                         filtered_locations.append(location.tolist())   
                         filtered_densities.append(density) 
             else:
+                
+                # cumlative methode: -------------------------------------------------------------------------------------------
+                distance, location, density = self.find_collision(ray_locations, ray_densities, self.threshold_slider.value)
+                if distance is not None:
+                    filtered_locations.append(location.tolist()) #type: ignore
+                    filtered_densities.append(density.item()) #type: ignore
+                    
+                 # difference methode (current): ----------------------------------------------------------------------------------------------
+                    
+                # first_iteration = True
+                # density_differece = 0
+                # previous_density = 0
+                # for location, density in zip(ray_locations, ray_densities):
+                #     if first_iteration:
+                #         first_iteration = False
+                #         previous_density = density
+                #         continue
+                #     if not first_iteration:
+                #         density_differece = abs(density - previous_density)
+                #     if not first_iteration and density_differece > self.density_threshold:
+                #         filtered_locations.append(location.tolist())
+                #         filtered_densities.append(density)
+                #         break
+                    
             # standardized densities methode: -----------------------------------------------------------------------------------
             
                 # global_mean = torch.mean(all_densities)
@@ -580,27 +616,6 @@ class RenderStateMachine(threading.Thread):
                 #         filtered_locations.append(location.tolist())   
                 #         filtered_densities.append(density) 
                 #         break
-            
-            # difference methode (current): ----------------------------------------------------------------------------------------------
-                # normalized densities:
-                # min_density = torch.min(ray_densities)
-                # max_density = torch.max(ray_densities)
-                # normalized_densities = (ray_densities - min_density) / (max_density - min_density + 1e-8)  # +1e-8 um Division durch 0 zu vermeiden
-                    
-                first_iteration = True
-                density_differece = 0
-                previous_density = 0
-                for location, density in zip(ray_locations, ray_densities):
-                    if first_iteration:
-                        first_iteration = False
-                        previous_density = density
-                        continue
-                    if not first_iteration:
-                        density_differece = abs(density - previous_density)
-                    if not first_iteration and density_differece > self.density_threshold:
-                        filtered_locations.append(location.tolist())
-                        filtered_densities.append(density)
-                        break
 
                 # largest density difference methode: ---------------------------------------------------------------------
                 
@@ -807,7 +822,32 @@ class RenderStateMachine(threading.Thread):
                 
             for index, (location, density) in enumerate(zip(filtered_locations, filtered_densities)):
                 self.add_point_as_mesh(location, index, density)
+                
+                
+    def find_collision(self, ray_locations, ray_densities, threshold):
+        """
+        Finds the collision point along a ray based on density values.
+        
+        ray_locations: Tensor of 3D coordinates representing points along the ray.
+        ray_densities: Tensor of density values corresponding to each point.
+        threshold: Cumulative density value at which a collision is detected.
+        
+        returns: Distance from the origin to the collision point, the collision location and density.
+        """
+        cumulative_density = 0.0
+        total_distance = 0.0
+        origin = ray_locations[0]
 
+        for location, density in zip(ray_locations[1:], ray_densities[1:]):
+            distance = self.compute_distance(origin, location)
+            total_distance += distance
+            cumulative_density += density.item() * distance
+            
+            if cumulative_density >= threshold:
+                return total_distance, location, density
+
+        return None, None, None  # Keine Kollision gefunden
+                
     def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.003, color= (0, 0, 255)):
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
@@ -832,23 +872,6 @@ class RenderStateMachine(threading.Thread):
         obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO, density))
         
         self.mesh_objs.append(obj)
-        
-    def print_single_ray_informations(self, print_list):
-        self.csv_filename = 'single_ray_informations.csv'
-         # "side id" "id", "location", "distance", "density", rgb
-        try:
-            with open(self.csv_filename, 'x', newline='') as csvfile:
-                csvwriter = csv.writer(csvfile)
-                headers = ["side_id", "ray_id", "distance", "density", "rgb"]
-                csvwriter.writerow(headers)
-        except FileExistsError:
-            pass
-        
-        for i, info in enumerate(print_list):
-            with open(self.csv_filename, 'a', newline='') as csvfile:
-                csvwriter = csv.writer(csvfile)
-                row = [self.side_id] + [self.ray_id] + info
-                csvwriter.writerow(row)
         
     def print_nearest_density(self, distance, density):
         position = self.box.position.tolist() if isinstance(self.box.position, np.ndarray) else self.box.position
