@@ -631,6 +631,7 @@ class Cameras(TensorDataclass):
         coord = torch.stack([(x - cx) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_x_offset = torch.stack([(x - cx + 1) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_y_offset = torch.stack([(x - cx) / fx, (y - cy + 1) / fy], -1)  # (num_rays, 2)
+        
         assert (
             coord.shape == num_rays_shape + (2,)
             and coord_x_offset.shape == num_rays_shape + (2,)

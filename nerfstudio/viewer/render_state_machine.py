@@ -564,11 +564,17 @@ class RenderStateMachine(threading.Thread):
                         filtered_densities.append(density) 
             else:
                 
-                # cumlative methode: -------------------------------------------------------------------------------------------
-                distance, location, density = self.find_collision(ray_locations, ray_densities, self.threshold_slider.value)
+                # transmittance methode: -------------------------------------------------------------------------------------------
+                distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
                 if distance is not None:
                     filtered_locations.append(location.tolist()) #type: ignore
                     filtered_densities.append(density.item()) #type: ignore
+                
+                # cumulative methode: -------------------------------------------------------------------------------------------
+                # distance, location, density = self.find_collision(ray_locations, ray_densities, self.threshold_slider.value)
+                # if distance is not None:
+                #     filtered_locations.append(location.tolist()) #type: ignore
+                #     filtered_densities.append(density.item()) #type: ignore
                     
                  # difference methode (current): ----------------------------------------------------------------------------------------------
                     
@@ -823,6 +829,33 @@ class RenderStateMachine(threading.Thread):
             for index, (location, density) in enumerate(zip(filtered_locations, filtered_densities)):
                 self.add_point_as_mesh(location, index, density)
                 
+    # concept of transmittance T(t), describes the probability of a photon to pass through a medium without being absorbed
+    # If the transmittance is low, the photon is more likely to be absorbed. Start with transmittance = 1 and multiply it with the transmittance of each point along the ray.
+    
+    def find_collision_with_transmittance(self, ray_locations, ray_densities, transmission_threshold=0.01):
+        """
+        Finds the collision point along a ray based on transmission values.
+        
+        ray_locations: Tensor of 3D coordinates representing points along the ray.
+        ray_densities: Tensor of density values corresponding to each point.
+        transmission_threshold: The threshold for the transmission probability to consider as a collision.
+        
+        returns: Distance from the origin to the collision point, the collision location and density.
+        """
+        total_distance = 0.0
+        transmittance = 1.0  # Initial transmittance
+        origin = ray_locations[0]
+
+        for location, density in zip(ray_locations[1:], ray_densities[1:]):
+            distance = self.compute_distance(origin, location)
+            total_distance += distance
+            delta_transmittance = torch.exp(-density * distance)
+            transmittance *= delta_transmittance
+
+            if transmittance < transmission_threshold:
+                return total_distance, location, density
+
+        return None, None, None  # No collision found
                 
     def find_collision(self, ray_locations, ray_densities, threshold):
         """
@@ -846,9 +879,9 @@ class RenderStateMachine(threading.Thread):
             if cumulative_density >= threshold:
                 return total_distance, location, density
 
-        return None, None, None  # Keine Kollision gefunden
+        return None, None, None  # no collision found
                 
-    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.003, color= (0, 0, 255)):
+    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.01, color= (0, 0, 255)):
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
