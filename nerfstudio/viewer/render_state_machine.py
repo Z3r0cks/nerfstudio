@@ -502,7 +502,7 @@ class RenderStateMachine(threading.Thread):
         fy = torch.tensor([[fy_value]], device='cuda:0')
         cx = torch.tensor([[self.width/2]], device='cuda:0')
         cy = torch.tensor([[self.height/2]], device='cuda:0')
-
+        
         camera = Cameras(
             camera_to_worlds=c2w,
             fx=fx,
@@ -512,7 +512,7 @@ class RenderStateMachine(threading.Thread):
             width=torch.tensor([[self.width]]),
             height=torch.tensor([[self.height]]),
             distortion_params=None,
-            camera_type=torch.tensor([[1]], device='cuda:0'),
+            camera_type=torch.tensor([[int(self.threshold_slider.value)]], device='cuda:0'),
             times=torch.tensor([[0.]], device='cuda:0')
         )
 

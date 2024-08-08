@@ -51,6 +51,7 @@ class CameraType(Enum):
     VR180_R = auto()
     ORTHOPHOTO = auto()
     FISHEYE624 = auto()
+    LIDAR = auto()
 
 
 CAMERA_MODEL_TO_TYPE = {
@@ -67,6 +68,7 @@ CAMERA_MODEL_TO_TYPE = {
     "VR180_R": CameraType.VR180_R,
     "ORTHOPHOTO": CameraType.ORTHOPHOTO,
     "FISHEYE624": CameraType.FISHEYE624,
+    "LIDAR": CameraType.LIDAR,
 }
 
 
@@ -620,17 +622,23 @@ class Cameras(TensorDataclass):
 
         # Get our image coordinates and image coordinates offset by 1 (offsets used for dx, dy calculations)
         # Also make sure the shapes are correct
-        # Debugging.log("cameras", "--------------------------------------------------------")
-        # Debugging.log("x coord", x)
-        # Debugging.log("y coord", y)
-        # Debugging.log("fx", fx)
-        # Debugging.log("fy", fy)
-        # Debugging.log("cx", cx)
-        # Debugging.log("cy", cy)
+        Debugging.log("cameras", "--------------------------------------------------------")
+        print("x: ", x.cpu().numpy())
+        print("y: ", y.cpu().numpy())
+        print("fx: ", fx.cpu().numpy())
+        print("fy: ", fy.cpu().numpy())
+        print("cx: ", cx.cpu().numpy())
+        print("cy: ", cy.cpu().numpy())
+        
+        # fx, fy, cx, cy = list from camera parameters * num_rays
         
         coord = torch.stack([(x - cx) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_x_offset = torch.stack([(x - cx + 1) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_y_offset = torch.stack([(x - cx) / fx, (y - cy + 1) / fy], -1)  # (num_rays, 2)
+        
+        print(coord)
+        print(coord_x_offset)
+        print(coord_y_offset)
         
         assert (
             coord.shape == num_rays_shape + (2,)
@@ -640,7 +648,6 @@ class Cameras(TensorDataclass):
         
         # Stack image coordinates and image coordinates offset by 1, check shapes too
         coord_stack = torch.stack([coord, coord_x_offset, coord_y_offset], dim=0)  # (3, num_rays, 2)
-        # Debugging.log("coord_stack 0", coord_stack)
         assert coord_stack.shape == (3,) + num_rays_shape + (2,)
 
         # Undistorts our images according to our distortion parameters
@@ -664,8 +671,9 @@ class Cameras(TensorDataclass):
                     ).reshape(-1, 2)
                     
         # Switch from OpenCV to OpenGL
-        coord_stack[..., 1] *= -1
 
+        coord_stack[..., 1] *= -1
+        
         # Make sure after we have undistorted our images, the shapes are still correct
         assert coord_stack.shape == (3,) + num_rays_shape + (2,)
 
@@ -691,7 +699,7 @@ class Cameras(TensorDataclass):
             Returns:
                 A tuple containing the origins and the directions of the rays.
             """
-
+            
             # Directions calculated similarly to equirectangular
             ods_cam_type = (
                 CameraType.OMNIDIRECTIONALSTEREO_R.value if eye == "right" else CameraType.OMNIDIRECTIONALSTEREO_L.value
@@ -704,7 +712,7 @@ class Cameras(TensorDataclass):
             directions_stack[..., 0][mask] = torch.masked_select(-torch.sin(theta) * torch.sin(phi), mask).float()
             directions_stack[..., 1][mask] = torch.masked_select(torch.cos(phi), mask).float()
             directions_stack[..., 2][mask] = torch.masked_select(-torch.cos(theta) * torch.sin(phi), mask).float()
-
+            
             vr_ipd = 0.064  # IPD in meters (note: scale of NeRF must be true to life and can be adjusted with the Blender add-on)
             isRightEye = 1 if eye == "right" else -1
 
@@ -749,6 +757,7 @@ class Cameras(TensorDataclass):
             Returns:
                 A tuple containing the origins and the directions of the rays.
             """
+            
             # Directions calculated similarly to equirectangular
             vr180_cam_type = CameraType.VR180_R.value if eye == "right" else CameraType.VR180_L.value
             mask = (self.camera_type[true_indices] == vr180_cam_type).squeeze(-1)
@@ -792,14 +801,11 @@ class Cameras(TensorDataclass):
         
         for cam in cam_types:
             if CameraType.PERSPECTIVE.value in cam_types:
-                # Debugging.log("coord_stack", coord_stack)
                 mask = (self.camera_type[true_indices] == CameraType.PERSPECTIVE.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
-
                 directions_stack[..., 0][mask] = torch.masked_select(coord_stack[..., 0], mask).float()
                 directions_stack[..., 1][mask] = torch.masked_select(coord_stack[..., 1], mask).float()
                 directions_stack[..., 2][mask] = -1.0
-                # Debugging.log("directions 1", directions_stack[0])
 
             elif CameraType.FISHEYE.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.FISHEYE.value).squeeze(-1)  # (num_rays)
@@ -818,10 +824,35 @@ class Cameras(TensorDataclass):
                 ).float()
                 directions_stack[..., 2][mask] = -torch.masked_select(torch.cos(theta), mask).float()
 
+            elif CameraType.LIDAR.value in cam_types:
+                def spherical_to_cartesian(theta, phi):
+                    x = -torch.sin(theta) * torch.sin(phi)
+                    y = torch.cos(phi)
+                    z = -torch.cos(theta) * torch.sin(phi)
+                    return x, y, z
+                
+                def equirectangular_to_spherical(coord_stack):
+                    theta = -torch.pi * coord_stack[..., 0]  # Längengrad
+                    phi = torch.pi * (0.5 - coord_stack[..., 1])  # Breitengrad
+                    return theta, phi
+                
+                mask = (self.camera_type[true_indices] == CameraType.LIDAR.value).squeeze(-1)  # (num_rays)
+                mask = torch.stack([mask, mask, mask], dim=0)
+
+                theta, phi = equirectangular_to_spherical(coord_stack)
+                directions_x, directions_y, directions_z = spherical_to_cartesian(theta, phi)
+                # theta = -torch.pi * coord_stack[..., 0]  # minus sign for right-handed
+                # phi = torch.pi * (0.5 - coord_stack[..., 1])
+                
+                directions_stack[..., 0][mask] = torch.masked_select(directions_x, mask).float()
+                directions_stack[..., 1][mask] = torch.masked_select(directions_y, mask).float()
+                directions_stack[..., 2][mask] = torch.masked_select(directions_z, mask).float()
+                
+                Debugging.log("directions_stack", directions_stack)     
+                
             elif CameraType.EQUIRECTANGULAR.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.EQUIRECTANGULAR.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
-
                 # For equirect, fx = fy = height = width/2
                 # Then coord[..., 0] goes from -1 to 1 and coord[..., 1] goes from -1/2 to 1/2
                 theta = -torch.pi * coord_stack[..., 0]  # minus sign for right-handed
@@ -907,14 +938,11 @@ class Cameras(TensorDataclass):
         directions_stack = torch.sum(
             directions_stack[..., None, :] * rotation, dim=-1
         )  # (..., 1, 3) * (..., 3, 3) -> (..., 3)
-        # Debugging.log("directions 2", directions_stack[0])
         directions_stack, directions_norm = camera_utils.normalize_with_norm(directions_stack, -1)
         assert directions_stack.shape == (3,) + num_rays_shape + (3,)
 
         origins = c2w[..., :3, 3]  # (..., 3)
         assert origins.shape == num_rays_shape + (3,)
-
-        # Debugging.log("directions", directions_stack[0])
         
         directions = directions_stack[0]
         assert directions.shape == num_rays_shape + (3,)
@@ -936,13 +964,6 @@ class Cameras(TensorDataclass):
             metadata["directions_norm"] = directions_norm[0].detach()
         else:
             metadata = {"directions_norm": directions_norm[0].detach()}
-        
-        # Debugging.log("origins", origins)
-        # Debugging.log("directions", directions)
-        # Debugging.log("pixel_area", pixel_area)
-        # Debugging.log("camera_indices", camera_indices)
-        # Debugging.log("times", times)
-        # Debugging.log("metadata", metadata)
         
         return RayBundle(
             origins=origins,
