@@ -622,23 +622,12 @@ class Cameras(TensorDataclass):
 
         # Get our image coordinates and image coordinates offset by 1 (offsets used for dx, dy calculations)
         # Also make sure the shapes are correct
-        Debugging.log("cameras", "--------------------------------------------------------")
-        print("x: ", x.cpu().numpy())
-        print("y: ", y.cpu().numpy())
-        print("fx: ", fx.cpu().numpy())
-        print("fy: ", fy.cpu().numpy())
-        print("cx: ", cx.cpu().numpy())
-        print("cy: ", cy.cpu().numpy())
         
         # fx, fy, cx, cy = list from camera parameters * num_rays
         
         coord = torch.stack([(x - cx) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_x_offset = torch.stack([(x - cx + 1) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_y_offset = torch.stack([(x - cx) / fx, (y - cy + 1) / fy], -1)  # (num_rays, 2)
-        
-        print(coord)
-        print(coord_x_offset)
-        print(coord_y_offset)
         
         assert (
             coord.shape == num_rays_shape + (2,)
@@ -825,31 +814,35 @@ class Cameras(TensorDataclass):
                 directions_stack[..., 2][mask] = -torch.masked_select(torch.cos(theta), mask).float()
 
             elif CameraType.LIDAR.value in cam_types:
-                def spherical_to_cartesian(theta, phi):
-                    x = -torch.sin(theta) * torch.sin(phi)
-                    y = torch.cos(phi)
-                    z = -torch.cos(theta) * torch.sin(phi)
-                    return x, y, z
+                global fov_rad
+                width = int(self.width[true_indices][0, 0, 0].item())
+                height = int(self.height[true_indices][0, 0, 0].item())
                 
-                def equirectangular_to_spherical(coord_stack):
-                    theta = -torch.pi * coord_stack[..., 0]  # Längengrad
-                    phi = torch.pi * (0.5 - coord_stack[..., 1])  # Breitengrad
-                    return theta, phi
+                fov_x = 2 * torch.atan(width / (2 * fx))
+                fov_x_degrees = fov_x * (180.0 / math.pi)
+                fov_x_degrees = int(round(fov_x_degrees[0, 0].item()))
+                if fov_x_degrees < 0:
+                    test = 180 - fov_x_degrees
+                    fov_x_degrees = (-fov_x_degrees) + test
+                    print(fov_x_degrees)
+                    print((-fov_x_degrees) + 180)
                 
-                mask = (self.camera_type[true_indices] == CameraType.LIDAR.value).squeeze(-1)  # (num_rays)
-                mask = torch.stack([mask, mask, mask], dim=0)
+                fov_rad = math.radians(fov_x_degrees)
+                
+                
+                theta = torch.linspace(-fov_rad / 2,  fov_rad / 2, steps=width, device='cuda:0')  # horizontal
+                phi = torch.zeros((height,), device='cuda:0')  # vertical
 
-                theta, phi = equirectangular_to_spherical(coord_stack)
-                directions_x, directions_y, directions_z = spherical_to_cartesian(theta, phi)
-                # theta = -torch.pi * coord_stack[..., 0]  # minus sign for right-handed
-                # phi = torch.pi * (0.5 - coord_stack[..., 1])
-                
-                directions_stack[..., 0][mask] = torch.masked_select(directions_x, mask).float()
-                directions_stack[..., 1][mask] = torch.masked_select(directions_y, mask).float()
-                directions_stack[..., 2][mask] = torch.masked_select(directions_z, mask).float()
-                
-                Debugging.log("directions_stack", directions_stack)     
-                
+                theta, phi = torch.meshgrid(theta, phi)
+                theta = theta.flatten()
+                phi = phi.flatten()
+
+                directions_stack = torch.zeros((3, height, width, 3), device='cuda:0')
+                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x component
+                directions_stack[0, :, :, 1] = torch.sin(phi)  # y
+                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z
+                directions_stack = -directions_stack # flip the z-axis       
+                                
             elif CameraType.EQUIRECTANGULAR.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.EQUIRECTANGULAR.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
@@ -935,12 +928,14 @@ class Cameras(TensorDataclass):
         rotation = c2w[..., :3, :3]  # (..., 3, 3)
         assert rotation.shape == num_rays_shape + (3, 3)
         
+        if CameraType.LIDAR.value in cam_types:
+            rotation = rotation.to(device='cuda:0')
+            
         directions_stack = torch.sum(
             directions_stack[..., None, :] * rotation, dim=-1
         )  # (..., 1, 3) * (..., 3, 3) -> (..., 3)
         directions_stack, directions_norm = camera_utils.normalize_with_norm(directions_stack, -1)
         assert directions_stack.shape == (3,) + num_rays_shape + (3,)
-
         origins = c2w[..., :3, 3]  # (..., 3)
         assert origins.shape == num_rays_shape + (3,)
         
@@ -965,6 +960,7 @@ class Cameras(TensorDataclass):
         else:
             metadata = {"directions_norm": directions_norm[0].detach()}
         
+        Debugging.log("directions: ", directions)
         return RayBundle(
             origins=origins,
             directions=directions,

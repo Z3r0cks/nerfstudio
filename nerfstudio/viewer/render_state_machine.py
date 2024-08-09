@@ -512,7 +512,7 @@ class RenderStateMachine(threading.Thread):
             width=torch.tensor([[self.width]]),
             height=torch.tensor([[self.height]]),
             distortion_params=None,
-            camera_type=torch.tensor([[int(self.threshold_slider.value)]], device='cuda:0'),
+            camera_type=10,
             times=torch.tensor([[0.]], device='cuda:0')
         )
 
@@ -989,6 +989,8 @@ class RenderStateMachine(threading.Thread):
         b: point b
         returns: distance
         """
+        a = a.cpu().numpy() if isinstance(a, torch.Tensor) else a
+        b = b.cpu().numpy() if isinstance(b, torch.Tensor) else b
 
         return (np.linalg.norm(np.array(a) - np.array(b)))
     
