@@ -938,8 +938,8 @@ class RenderStateMachine(threading.Thread):
         global global_density
         global_distance = self.compute_distance(self.box.position, point)
         global_density = density
-        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.5f} m", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
-        destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.08))
+        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.4f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
+        # destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.08))
         
         # distance_label.label_size = 0.1
         # distance_ray = self.viewer.viser_server.add_gui_modal("Distance")
@@ -962,7 +962,7 @@ class RenderStateMachine(threading.Thread):
         )
 
         self.mesh_objs.append(distance_label)
-        self.mesh_objs.append(destity_label)
+        # self.mesh_objs.append(destity_label)
         self.mesh_objs.append(distance_ray)
         
         distance_ray.on_click(lambda _: distance_ray.remove())

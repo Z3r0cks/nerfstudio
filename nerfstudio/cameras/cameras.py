@@ -822,13 +822,9 @@ class Cameras(TensorDataclass):
                 fov_x_degrees = fov_x * (180.0 / math.pi)
                 fov_x_degrees = int(round(fov_x_degrees[0, 0].item()))
                 if fov_x_degrees < 0:
-                    test = 180 - fov_x_degrees
-                    fov_x_degrees = (-fov_x_degrees) + test
-                    print(fov_x_degrees)
-                    print((-fov_x_degrees) + 180)
+                    fov_x_degrees = 360 + fov_x_degrees
                 
                 fov_rad = math.radians(fov_x_degrees)
-                
                 
                 theta = torch.linspace(-fov_rad / 2,  fov_rad / 2, steps=width, device='cuda:0')  # horizontal
                 phi = torch.zeros((height,), device='cuda:0')  # vertical
@@ -960,7 +956,6 @@ class Cameras(TensorDataclass):
         else:
             metadata = {"directions_norm": directions_norm[0].detach()}
         
-        Debugging.log("directions: ", directions)
         return RayBundle(
             origins=origins,
             directions=directions,
