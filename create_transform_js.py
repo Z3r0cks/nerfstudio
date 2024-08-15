@@ -17,31 +17,25 @@
 
 # cos(0) = 1
 # sin(0) = 0
-#cos(45) = 0.7071067811865476
-#sin(45) = 0.7071067811865475
+#cos(45) = 0.866025067811865476
+#sin(45) = 0.866025067811865475
 # cos(90) = 0
 # sin(90) = 1
 
 import json
 import numpy as np
+import os
 
 
-def create_transform_json(cameras):
-   if cameras["params"]["w"] < cameras["params"]["h"]:
-      cx = cameras["params"]["w"] / 2
-      cy = cameras["params"]["h"] / 2
-   else:
-      cx = cameras["params"]["h"] / 2
-      cy = cameras["params"]["w"] / 2
-      
+def create_transform_json(cameras):  
    transform_json = {
       "w": cameras["params"]["w"],
       "h": cameras["params"]["h"],
       "fl_x": cameras["params"]["fl_x"],
       "fl_y": cameras["params"]["fl_y"],    
-      "cx": cx,
-      "cy": cy,
-      "k1": -5.749150233463336,
+      "cx": cameras["params"]["w"] / 2,
+      "cy": cameras["params"]["h"] / 2,
+      "k1": 0.017336012291600932,
       "k2": 0.0,
       "p1": 0.0,
       "p2": 0.0,
@@ -107,127 +101,335 @@ def rotate_z(rotation_angle):
 
 cameras = {
    "params": {
-      "w": 1920,
-      "h": 2560,
-      "fl_x": 24043.75700169994,
-      "fl_y": 24043.75700169994,
+      "h": 1920,
+      "w": 2560,
+      "fl_x": 1811,
+      "fl_y": 1811,
       "path": "images"
-   }, 
-   "camera_list": [
-      {
-         "name": "01.jpg",
-         "pos": [1, 0, 0.118],
-         "rotation_list": [
-            None
-         ]
-      }, 
-      {
-         "name": "02.jpg",
-         "pos": [0.7071, 0.7071, 0.118],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "03.jpg",
-         "pos": [0, 1, 0.118],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "04.jpg",
-         "pos": [-0.7071, 0.7071, 0.118],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "05.jpg",
-         "pos": [-1, 0, 0.118],
-         "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "06.jpg",
-         "pos": [-0.7071, -0.7071, 0.118],
-         "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "07.jpg",
-         "pos": [0, -1, 0.118],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "08.jpg",
-         "pos": [0.7071, -0.7071, 0.118],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "09.jpg",
-         "pos": [1, 0, 1],
-          "rotation_list": [
-            None
-         ]
-      }, 
-      {
-         "name": "10.jpg",
-         "pos": [0.7071, 0.7071, 1],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "11.jpg",
-         "pos": [0, 1, 1],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "12.jpg",
-         "pos": [-0.7071, 0.7071, 1],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "13.jpg",
-         "pos": [-1, 0, 1],
-         "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "14.jpg",
-         "pos": [-0.7071, -0.7071, 1],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "15.jpg",
-         "pos": [0, -1, 1],
-          "rotation_list": [
-            None
-         ]
-      },
-      {
-         "name": "16.jpg",
-         "pos": [0.7071, -0.7071, 1],
-          "rotation_list": [
-            None
-         ]
-      },
-   ]
+   },
+   "camera_list": []
 }
+
+# rotation_y = -90
+# rotation_x = -90
+# rotation_z = -135
+
+image_num = 32
+levels = 2
+images_per_level = image_num / levels
+position_degree = 360 / images_per_level
+
+height_buttom = 0.0575
+height_top = 0.427
+factorize = 4
+
+for j in range(levels):
+   heigth = height_buttom if j == 0 else height_top
+   for i in range(int(images_per_level)):
+      cameras["camera_list"].append({
+         "name": f"{i + 1:02}.jpg",
+         "pos": [np.cos(np.radians(i * position_degree))*factorize, np.sin(np.radians(i * position_degree))*factorize, heigth*factorize],
+         "rotation_list": [
+            {
+               "rotation_axis": "y",
+               "rotation_angle": (i * position_degree) - 90
+            },
+            {
+               "rotation_axis": "x",
+               "rotation_angle": 90
+            }
+         ]
+      })
+   
+
+matrix = create_transform_json(cameras)
+
+out_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/position_test/1m_chair/transforms.json"
+
+if os.path.exists(out_dir):
+   os.remove(out_dir)
+   
+with open(out_dir, "w") as f:
+   json.dump(matrix, f, indent=4)
+
+# cameras = {
+#    "params": {
+#       "h": 1920,
+#       "w": 2560,
+#       "fl_x": 1805.0912628601652,
+#       "fl_y": 1805.0912628601652,
+#       "path": "images"
+#    }, 
+#    "camera_list": [
+#       {
+#          "name": "01.jpg",
+#          "pos": [1, 0, 0.0575],
+#          "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             }
+#          ]
+#       }, 
+#       {
+#          "name": "02.jpg",
+#          "pos": [0.866025, 0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -45         
+#             }
+#          ]
+#       },
+#       {
+#          "name": "03.jpg",
+#          "pos": [0, 1, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -90         
+#             }
+#          ]
+#       },
+#       {
+#          "name": "04.jpg",
+#          "pos": [-0.866025, 0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -135         
+#             }
+#          ]
+#       },
+#       {
+#          "name": "05.jpg",
+#          "pos": [-1, 0, 0.0575],
+#          "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -180        
+#             }
+#          ]
+#       },
+#       {
+#          "name": "06.jpg",
+#          "pos": [-0.866025, -0.866025, 0.0575],
+#          "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -225        
+#             }
+#          ]
+#       },
+#       {
+#          "name": "07.jpg",
+#          "pos": [0, -1, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -270       
+#             }
+#          ]
+#       },
+#       {
+#          "name": "08.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "09.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "10.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "11.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "12.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "13.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "14.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+#       {
+#          "name": "15.jpg",
+#          "pos": [0.866025, -0.866025, 0.0575],
+#           "rotation_list": [
+#             {
+#                "rotation_axis": "y",
+#                "rotation_angle": rotation_y         
+#             },
+#             {
+#                "rotation_axis": "x",
+#                "rotation_angle": rotation_x         
+#             },
+#             {
+#                "rotation_axis": "z",
+#                "rotation_angle": -315      
+#             }
+#          ]
+#       },
+    
+#    ]
+# }
 
 # cameras = {
 #    "params": {
@@ -240,11 +442,11 @@ cameras = {
 #    "camera_list": [
 #       {
 #          "name": "01.jpg",
-#          "pos": [1, 0, 0.118],
+#          "pos": [1, 0, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90         
+#                "rotation_angle": rotation_y         
 #             },
 #             {
 #                "rotation_axis": "x",
@@ -254,11 +456,11 @@ cameras = {
 #       }, 
 #       {
 #          "name": "02.jpg",
-#          "pos": [0.7071, 0.7071, 0.118],
+#          "pos": [0.866025, 0.866025, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
@@ -272,15 +474,15 @@ cameras = {
 #       },
 #       {
 #          "name": "03.jpg",
-#          "pos": [1, 0, 0.118],
+#          "pos": [1, 0, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
-#                "rotation_angle": -90         
+#                "rotation_angle": rotation_y         
 #             },
 #             {
 #                "rotation_axis": "x",
@@ -290,11 +492,11 @@ cameras = {
 #       },
 #       {
 #          "name": "04.jpg",
-#          "pos": [-0.7071, 0.7071, 0.118],
+#          "pos": [-0.866025, 0.866025, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
@@ -308,11 +510,11 @@ cameras = {
 #       },
 #       {
 #          "name": "02.jpg",
-#          "pos": [0, 1, 0.118],
+#          "pos": [0, 1, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
@@ -322,11 +524,11 @@ cameras = {
 #       },
 #       {
 #          "name": "02.jpg",
-#          "pos": [0, 1, 0.118],
+#          "pos": [0, 1, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
@@ -336,11 +538,11 @@ cameras = {
 #       },
 #       {
 #          "name": "02.jpg",
-#          "pos": [0, 1, 0.118],
+#          "pos": [0, 1, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
@@ -350,11 +552,11 @@ cameras = {
 #       },
 #       {
 #          "name": "02.jpg",
-#          "pos": [0, 1, 0.118],
+#          "pos": [0, 1, 0.0575],
 #          "rotation_list": [
 #             {
 #                "rotation_axis": "y",
-#                "rotation_angle": -90          
+#                "rotation_angle": rotation_y          
 #             },
 #             {
 #                "rotation_axis": "z",
@@ -364,12 +566,3 @@ cameras = {
 #       },
 #    ]
 # }
-
-# "fl_x": 24043.75700169994,
-# "fl_y": 24043.75700169994,
-
-matrix = create_transform_json(cameras)
-
-out_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/position_test/transform.json"
-with open(out_dir, "w") as outfile:
-   json.dump(matrix, outfile, indent=4)

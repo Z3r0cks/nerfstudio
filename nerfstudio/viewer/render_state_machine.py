@@ -40,7 +40,6 @@ from nerfstudio.utils.debugging import Debugging
 # from joblib import Parallel, delayed
 from scipy.spatial.transform import Rotation as R
 import viser.transforms as vtf
-import viser
 import math
 import csv
 #-------------------------------------------------------------
@@ -111,7 +110,8 @@ class RenderStateMachine(threading.Thread):
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("Add Density GUI").on_click(lambda _: self.add_gui())
         self.frame_factor = 1
-        self.translate_pos_from_omnivers = (1, -2, 10) # cube_interference
+        # self.translate_pos_from_omnivers = (1, -2, 10) # cube_interference
+        self.translate_pos_from_omnivers = (0.13712134957313538, 0.138727068901062, -0.03451577574014664) # chair
         #-------------------------------------------------------------
         
     def action(self, action: RenderAction):

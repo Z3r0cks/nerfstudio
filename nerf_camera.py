@@ -14,20 +14,24 @@ from scipy.spatial.transform import Rotation
 from omni.isaac.ui.element_wrappers import CollapsableFrame, StateButton, Button, CheckBox
 from ..safety.lidar import Lidar
 
+
+dir = "D:/Masterthesis/omniverse/cube_interference"
+sleep_time = 1.5
+width = 1280
+height = 720
+focal_length = 23
+
 async def capture_image_from_camera(viewport, camera_path, image_path):
     viewport.camera_path = camera_path
 
     await omni.kit.app.get_app().next_update_async()
-    await asyncio.sleep(.8) 
+    await asyncio.sleep(sleep_time) 
     capture_viewport_to_file(viewport, image_path)
 
 def create_transform_matrix(pos, rot):
-    
     """Create a standard transformation matrix from the given position and rotation."""
     
     rotation = Rotation.from_euler("xyz", rot, degrees=True).as_matrix()
-    x, y, z = rot
-    
     rotation_matrix = np.array([
         [rotation[0, 0], rotation[0, 1], rotation[0, 2], pos[0]],
         [rotation[1, 0], rotation[1, 1], rotation[1, 2], pos[1]],
@@ -37,32 +41,51 @@ def create_transform_matrix(pos, rot):
  
     return rotation_matrix.tolist()
 
+def get_focal_length_x_y(camera_path):
+    stage = omni.usd.get_context().get_stage()
+    camera = stage.GetPrimAtPath(camera_path)
+    focal_length = camera.GetAttribute("focalLength").Get()
+    horiz_aperture = camera.GetAttribute("horizontalAperture").Get()
+    vert_aperture = height/width * horiz_aperture
+    return ((height * focal_length / vert_aperture),(width * focal_length / horiz_aperture))
+
 async def generate_images_from_scene():
-    # object_center = Gf.Vec3f(1.5, 1.7, 0)
-    # camera_count = 4
     camera_positions = []
     camera_rotations = []
     frames = []
+    # object_center = [Gf.Vec3f(1, 0, 1), Gf.Vec3f(5, 2, 3)] cendroid 5
+    # angle_of_camera = [83, 59]
+    # radien = [7, 7]  # distance of the camera from the object center
+    # object_center = [Gf.Vec3f(0, 0, 2), Gf.Vec3f(0, 0, 4)]
+    # image_count = [2, 2]
 
-    # camera_heights = [3, 5, 7, 8.8]  # height of the camera
-    # rotation_x_values = [70, 60, 47, 15]  # angle of the camera
-    # radien = [7, 7, 6, 2]  # distance of the camera from the object center
-    camera_heights = [0.3, 3, 5, 7, 8.8, 0, 0.3]  # height of the camera
-    rotation_x_values = [98, 70, 60, 47, 15, 110, 90]  # angle of the camera
-    radien = [5.3, 7, 7, 7, 2, 0.1, 0.1]  # distance of the camera from the object center
-    object_center = [Gf.Vec3f(1.5, 1.7, 0), Gf.Vec3f(1.5, 1.7, 0), Gf.Vec3f(1.5, 1.7, 0), Gf.Vec3f(1.5, 1.7, 0), Gf.Vec3f(1.5, 1.7, 0), Gf.Vec3f(0, 0, 0), Gf.Vec3f(0, 0, 0)]
-    image_count = [30, 30, 30, 30, 30, 25, 25]
+    # angle_of_camera = [40, 60, 70, 87, 97]
+    # radien = [6, 7, 7, 7, 5]  # distance of the camera from the object center
+    # object_center = [Gf.Vec3f(1, 1, 8), Gf.Vec3f(1, 1, 5), Gf.Vec3f(1, 1, 3), Gf.Vec3f(1, 1, 1.5), Gf.Vec3f(1, 1, 0.2)]
+    # image_count = [35, 35, 35, 35, 35]
+    
+    #cube 3
+    # angle_of_camera = [52, 58, 66, 75, 50, 54, 66, 50, 54, 66]
+    # radien = [16, 11, 10, 10, 15, 13, 12, 15, 13, 12]  # distance of the camera from the object center
+    # object_center = [Gf.Vec3f(0, 0, 13), Gf.Vec3f(0, 0, 8), Gf.Vec3f(0, 0, 5), Gf.Vec3f(0, 0, 3), Gf.Vec3f(8, -6, 12), Gf.Vec3f(8, -6, 9), Gf.Vec3f(8, -6, 5), Gf.Vec3f(-4, 4, 12), Gf.Vec3f(-4, 4, 9), Gf.Vec3f(-4, 4, 5)]
+    # image_count = [72, 72, 72, 72, 72, 72, 72, 72, 72, 72]
+    
+    #cube single
+    angle_of_camera = [30, 52, 60, 68, 76]
+    radien = [9, 15, 15, 15, 13, 13]  # distance of the camera from the object center
+    object_center = [Gf.Vec3f(1, -2, 16), Gf.Vec3f(1, -2, 13), Gf.Vec3f(1, -2, 10), Gf.Vec3f(1, -2, 7), Gf.Vec3f(1, -2, 4)]
+    image_count = [72, 72, 72, 72, 72]
             
-    for z, rot_x, radius, center, length in zip(camera_heights, rotation_x_values, radien, object_center, image_count):
+    for rot_x, radius, center, length in zip(angle_of_camera, radien, object_center, image_count):
         for i in range(length):
             angle = 2 * math.pi * i / length
             x = center[0] + radius * math.cos(angle)
             y = center[1] + radius * math.sin(angle)
+            z = center[2]
             pos = Gf.Vec3f(x, y, z)
             direction = center - pos
             direction = direction.GetNormalized()
 
-            # Berechnen Sie die Kamerarotation, so dass die Kamera auf center ausgerichtet ist
             y_rot = math.degrees(math.atan2(direction[1], direction[0])) - 90
 
             camera_positions.append(pos)
@@ -70,10 +93,13 @@ async def generate_images_from_scene():
     
     stage = omni.usd.get_context().get_stage()
     viewport = get_active_viewport()
-
+    fly = 0
+    flx = 0
+    
     for i, (pos, rot) in enumerate(zip(camera_positions, camera_rotations)):
         camera_name = f"camera_{i}"
         camera_path = f"/World/{camera_name}"
+            
         if not stage.GetPrimAtPath(camera_path):
             camera_prim = UsdGeom.Camera.Define(stage, camera_path)
             
@@ -84,7 +110,7 @@ async def generate_images_from_scene():
 
             # change camera path
             viewport.camera_path = camera_path
-            image_path = f"D:\Masterthesis\omniverse\yellow_grey_diffuse_floor\{camera_name}.png"
+            image_path = f"{dir}\{camera_name}.png"
             await capture_image_from_camera(viewport, camera_path, image_path)
 
             transform_matrix = create_transform_matrix(pos, rot)
@@ -93,63 +119,46 @@ async def generate_images_from_scene():
                 "transform_matrix": transform_matrix,
                 "colmap_im_id": i
             })
-
+        
+            if camera_path == "/World/camera_0":
+                fy, fx = get_focal_length_x_y(camera_path)
+                flx, fly = fx, fy
+            
             stage.RemovePrim(camera_prim.GetPath())
 
     transform_data = {
-        "w": 1280,
-        "h": 720,
-        "fl_x": 1406.2874242545224,
-        "fl_y": 1403.5877771472647,
-        "cx": 640,
-        "cy": 360,
+        "w": width,
+        "h": height,
+        "fl_x": fly,
+        "fl_y": flx,
+        "cx": width / 2,
+        "cy": height / 2,
         "k1": 0,
         "k2": 0,
         "p1": 0,
         "p2": 0,
         "camera_model": "OPENCV",
         "frames": frames,
-        # "applied_transform": [
-        #     [
-        #         1.0,
-        #         0.0,
-        #         0.0,
-        #         0.0
-        #     ],
-        #     [
-        #         0.0,
-        #         0.0,
-        #         1.0,
-        #         0.0
-        #     ],
-        #     [
-        #         -0.0,
-        #         -1.0,
-        #         -0.0,
-        #         -0.0
-        #     ]
-        # ],
-        # "ply_file_path": "sparse_pc.ply"
     }
 
-    with open("D:\Masterthesis\omniverse\yellow_grey_diffuse_floor/transform.json", "w") as f:
+    with open(f"{dir}/transform.json", "w") as f:
         json.dump(transform_data, f, indent=4)
 
 
 lidar_run = False
-
+    
 async def start_lidar():
     lidar_prim_path = "/SICK_picoScan150"
     lidar = Lidar(lidar_prim_path)
     data = lidar.get_data()
     distances = data["distance"]
-    position = np.array([2.0, -1.0, 0.2])
-    rotation = np.array([0.0, 0.0, 0.2])
+    position = np.array([4.5, 0.5, 1])
+    rotation = np.array([0.0, 90, 0])
     pose = np.hstack((position, rotation))
 
     # save distances to file
-    file_path_distance = "D:/Masterthesis/omniverse/lidar_data/distance.csv"
-    file_path_pose = "D:/Masterthesis/omniverse/lidar_data/pose_data.csv"
+    file_path_distance = "D:/Masterthesis/omniverse/lidar_data/cube_interference.csv"
+    file_path_pose = "D:/Masterthesis/omniverse/lidar_data/cube_interference.csv"
     os.makedirs(os.path.dirname(file_path_distance), exist_ok=True)
     os.makedirs(os.path.dirname(file_path_pose), exist_ok=True)
     # np.savetxt(file_path_distance, distances, delimiter=",")
