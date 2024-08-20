@@ -28,7 +28,7 @@ import tyro
 from nerfstudio.configs.base_config import ViewerConfig
 from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import Pipeline
-from nerfstudio.utils import writer
+# from nerfstudio.utils import writer
 from nerfstudio.utils.eval_utils import eval_setup
 from nerfstudio.viewer.viewer_density import ViewerDensity as ViewerState
 from nerfstudio.utils.debugging import Debugging
@@ -62,6 +62,9 @@ class RunViewer:
             eval_num_rays_per_chunk=None,
             test_mode="test",
         )
+        
+        path = str(self.load_config)
+        dataparser_transforms_path = f'{str(path[slice(-10)])}dataparser_transforms.json'
 
         num_rays_per_chunk = config.viewer.num_rays_per_chunk
         assert self.viewer.num_rays_per_chunk == -1
@@ -82,7 +85,7 @@ class RunViewer:
             # websocket_port: None
             # websocket_port_default: 7007      
 
-        _start_viewer(config, pipeline, step)
+        _start_viewer(config, pipeline, step, dataparser_transforms_path)
 
     def save_checkpoint(self, *args, **kwargs):
         """
@@ -90,7 +93,7 @@ class RunViewer:
         """
 
 
-def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
+def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int, dataparser_transforms_path: str) -> None:
     """Starts the viewer
 
     Args:
@@ -101,16 +104,8 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
     
     base_dir = config.get_base_dir()
     viewer_log_path = base_dir / config.viewer.relative_log_filename
-    banner_messages = None
     viewer_state = None
-    # if config.vis == "viewer_legacy":
-    #     viewer_state = ViewerLegacyState(
-    #         config.viewer,
-    #         log_filename=viewer_log_path,
-    #         datapath=pipeline.datamanager.get_datapath(),
-    #         pipeline=pipeline,
-    #     )
-    #     banner_messages = [f"Legacy viewer at: {viewer_state.viewer_url}"]
+
     if config.vis == "viewer":
         viewer_state = ViewerState(
             config.viewer,
@@ -118,41 +113,22 @@ def _start_viewer(config: TrainerConfig, pipeline: Pipeline, step: int):
             datapath=pipeline.datamanager.get_datapath(),
             pipeline=pipeline,
             share=config.viewer.make_share_url,
+            dataparser_transforms_path = dataparser_transforms_path
         )
-        banner_messages = viewer_state.viewer_info
     else:
         raise ValueError(f"Unknown vis type: {config.vis}")
 
-    # We don't need logging, but writer.GLOBAL_BUFFER needs to be populated
-    # config.logging.local_writer.enable = False
-    # writer.setup_local_writer(config.logging, max_iter=config.max_num_iterations, banner_messages=banner_messages)
-
-    # assert viewer_state and pipeline.datamanager.train_dataset
-    # viewer_state.init_scene(
-    #     train_dataset=pipeline.datamanager.train_dataset,
-    #     train_state="completed",
-    #     eval_dataset=pipeline.datamanager.eval_dataset,
-    # )
-    # print("Looping")
-    # if isinstance(viewer_state, ViewerLegacyState):
-    #     viewer_state.viser_server.set_training_state("completed")
-    # viewer_state.update_scene(step=step)
     while True:
         time.sleep(0.01)
-
 
 def entrypoint():
     """Entrypoint for use with pyproject scripts."""
     
-    print("Test1")
     # tyro is a python biblotek that provides a command line interface for python scripts
     tyro.extras.set_accent_color("green")
-    tyro.cli(tyro.conf.FlagConversionOff[RunViewer]).main()
-    
-
+    tyro.cli(tyro.conf.FlagConversionOff[RunViewer]).main() #type: ignore
 
 if __name__ == "__main__":
-    print("Test")
     entrypoint()
 
 # For sphinx docs

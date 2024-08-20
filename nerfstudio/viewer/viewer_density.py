@@ -30,19 +30,19 @@ from typing_extensions import assert_never
 #-------------------------------------------------------------
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
-import plotly.graph_objects as go
+# import plotly.graph_objects as go
 
-from nerfstudio.cameras.camera_optimizers import CameraOptimizer
+# from nerfstudio.cameras.camera_optimizers import CameraOptimizer
 from nerfstudio.cameras.cameras import CameraType
 from nerfstudio.configs import base_config as cfg
-from nerfstudio.data.datasets.base_dataset import InputDataset
+# from nerfstudio.data.datasets.base_dataset import InputDataset
 from nerfstudio.models.base_model import Model
 from nerfstudio.models.splatfacto import SplatfactoModel
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils.decorators import check_main_thread, decorate_all
-from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName
+# from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName
 from nerfstudio.viewer.control_panel import ControlPanel
-from nerfstudio.viewer.export_panel import populate_export_tab
+# from nerfstudio.viewer.export_panel import populate_export_tab
 from nerfstudio.viewer.render_panel import populate_render_tab
 from nerfstudio.viewer.render_state_machine import RenderAction, RenderStateMachine
 from nerfstudio.viewer.utils import CameraState, parse_object
@@ -58,8 +58,8 @@ from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
 # from scipy.spatial.transform import Rotation as R
 from nerfstudio.viewer.render_state_machine import RenderAction
 
-if TYPE_CHECKING:
-    from nerfstudio.engine.trainer import Trainer
+# if TYPE_CHECKING:
+#     from nerfstudio.engine.trainer import Trainer
 
 VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
@@ -88,6 +88,7 @@ class ViewerDensity:
         self,
         config: cfg.ViewerConfig,
         log_filename: Path,
+        dataparser_transforms_path: str,
         datapath: Path,
         pipeline: Pipeline,
         # trainer: Optional[Trainer] = None,
@@ -98,6 +99,7 @@ class ViewerDensity:
         self.config = config
         # self.trainer = trainer
         self.last_step = 0
+        self.dataparser_transforms_path = dataparser_transforms_path
         self.train_lock = train_lock
         self.pipeline = pipeline
         self.log_filename = log_filename
@@ -572,7 +574,6 @@ class ViewerDensity:
     def handle_new_client(self, client: viser.ClientHandle) -> None:
         self.render_statemachines[client.client_id] = RenderStateMachine(self, VISER_NERFSTUDIO_SCALE_RATIO, client)
         self.render_statemachines[client.client_id].start()
-        
 
         @client.camera.on_update
         def _(_: viser.CameraHandle) -> None:

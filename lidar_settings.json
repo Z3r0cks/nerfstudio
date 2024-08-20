@@ -1,0 +1,20 @@
+{
+   "multiscan_100": {
+      "name": "MultiScan 100",
+      "min_distance": 0.05,
+      "max_distance": 62.0,
+      "_angle_resolution": 0.125,
+      "angle_resolution": 1,
+      "horizontal_opening_angel": 360.0,
+      "vertical_opening_angel":  65.0
+   },
+   "pico_scan_100_core": {
+      "name": "PicoScan 100 Core",
+      "min_distance": 0.05,
+      "max_distance": 25.0,
+      "_angle_resolution": 0.25,
+      "angle_resolution": 1,
+      "horizontal_opening_angel": 276.0,
+      "vertical_opening_angel": 1.0
+   }
+}
