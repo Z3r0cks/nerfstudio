@@ -814,30 +814,29 @@ class Cameras(TensorDataclass):
                 directions_stack[..., 2][mask] = -torch.masked_select(torch.cos(theta), mask).float()
 
             elif CameraType.LIDAR.value in cam_types:
-                global fov_rad
                 width = int(self.width[true_indices][0, 0, 0].item())
                 height = int(self.height[true_indices][0, 0, 0].item())
                 
                 fov_x = 2 * torch.atan(width / (2 * fx))
-                fov_x_degrees = fov_x * (180.0 / math.pi)
-                fov_x_degrees = int(round(fov_x_degrees[0, 0].item()))
-                if fov_x_degrees < 0:
-                    fov_x_degrees = 360 + fov_x_degrees
+                fov_y = 2 * torch.atan(height / (2 * fy))
                 
-                fov_rad = math.radians(fov_x_degrees)
+                if fov_x[0, 0] < 0:
+                    fov_x = 2 * math.pi + fov_x
+
+                if fov_y[0, 0] < 0:
+                    fov_y = 2 * math.pi + fov_y
                 
-                theta = torch.linspace(-fov_rad / 2,  fov_rad / 2, steps=width, device='cuda:0')  # horizontal
-                phi = torch.zeros((height,), device='cuda:0')  # vertical
+                theta = torch.linspace(-fov_x[0, 0].item() / 2, fov_x[0, 0].item() / 2, steps=width, device='cuda:0')  # horizontaler FOV
+                phi = torch.linspace(-fov_y[0, 0].item() / 2, fov_y[0, 0].item() / 2, steps=height, device='cuda:0')  # vertikaler FOv
 
-                theta, phi = torch.meshgrid(theta, phi)
-                theta = theta.flatten()
-                phi = phi.flatten()
-
+                theta, phi = torch.meshgrid(theta, phi, indexing='xy')
+                
                 directions_stack = torch.zeros((3, height, width, 3), device='cuda:0')
-                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x component
-                directions_stack[0, :, :, 1] = torch.sin(phi)  # y
-                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z
-                directions_stack = -directions_stack # flip the z-axis       
+                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x-Komponente
+                directions_stack[0, :, :, 1] = torch.sin(phi)  # y-Komponente
+                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z-Komponente
+                
+                directions_stack = -directions_stack      
                                 
             elif CameraType.EQUIRECTANGULAR.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.EQUIRECTANGULAR.value).squeeze(-1)  # (num_rays)

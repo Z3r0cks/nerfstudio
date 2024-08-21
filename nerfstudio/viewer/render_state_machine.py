@@ -103,7 +103,8 @@ class RenderStateMachine(threading.Thread):
         self.ray_id = 0
         self.side_id = 0
         self.density_threshold = 0
-        self.FOV = 60
+        self.fov_x = 210
+        self.fov_y = 1
         self.width = 2
         self.height = 1
         self.pixel_area = 1
@@ -340,10 +341,11 @@ class RenderStateMachine(threading.Thread):
                 self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
                 
             with self.viewer.viser_server.add_gui_folder("Density Settings"):
-                self.perspectiv_fov = self.viewer.viser_server.add_gui_slider("Perspectiv FOV", 0, 360, 1, 30)
+                self.perspectiv_fov_x = self.viewer.viser_server.add_gui_slider("FOV X", 0, 360, 1, 30)
                 self.perspectiv_heigth = self.viewer.viser_server.add_gui_slider("Perspectiv Height", 1, 5000, 1, 1)
+                self.perspectiv_fov_y = self.viewer.viser_server.add_gui_slider("FOV Y", 0, 360, 1, 30)
                 self.perspectiv_width = self.viewer.viser_server.add_gui_slider("Perspectiv Width", 1, 5000, 1, 2)
-                self.perspectiv_pixel_area = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
+                # self.perspectiv_pixel_area = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
                 
             with self.viewer.viser_server.add_gui_folder("ID Settings"):
                 self.ray_id_slider = self.viewer.viser_server.add_gui_slider("Ray ID", 0, 10000, 1, 0)
@@ -364,7 +366,8 @@ class RenderStateMachine(threading.Thread):
             self.side_id_slider.on_update(lambda _: setattr(self, "side_id", self.side_id_slider.value))
             
             self.threshold_slider.on_update(lambda _: setattr(self, "density_threshold", self.threshold_slider.value))
-            self.perspectiv_fov.on_update(lambda _: setattr(self, "FOV", self.perspectiv_fov.value))
+            self.perspectiv_fov_x.on_update(lambda _: setattr(self, "fov_x", self.perspectiv_fov_x.value))
+            self.perspectiv_fov_y.on_update(lambda _: setattr(self, "fov_y", self.perspectiv_fov_y.value))
             self.perspectiv_heigth.on_update(lambda _: setattr(self, "height", self.perspectiv_heigth.value))
             self.perspectiv_width.on_update(lambda _: setattr(self, "width", self.perspectiv_width.value))
             self.perspectiv_pixel_area.on_update(lambda _: setattr(self, "pixel_area", self.perspectiv_pixel_area.value))
@@ -427,8 +430,8 @@ class RenderStateMachine(threading.Thread):
                         origin = torch.tensor(self.perspectiv.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
                         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
                         
-                        fx_value = self.width / (2 * math.tan(math.radians(self.FOV / 2)))
-                        fy_value = self.height / (2 * math.tan(math.radians(self.FOV / 2)))
+                        fx_value = self.width / (2 * math.tan(math.radians(self.fov_x / 2)))
+                        fy_value = self.height / (2 * math.tan(math.radians(self.fov_x / 2)))
 
                         fx = torch.tensor([[fx_value]], device='cuda:0')
                         fy = torch.tensor([[fy_value]], device='cuda:0')
@@ -509,17 +512,16 @@ class RenderStateMachine(threading.Thread):
 
         height = int(scanner_settings["vertical_opening_angel"] / scanner_settings["angle_resolution"]) if scanner_settings is not None else self.height
         width = int(scanner_settings["horizontal_opening_angel"] / scanner_settings["angle_resolution"]) if scanner_settings is not None else self.width
-        FOV = int(scanner_settings["horizontal_opening_angel"]) if scanner_settings is not None else self.FOV
+        fov_x = int(scanner_settings["horizontal_opening_angel"]) if scanner_settings is not None else self.fov_x
+        fov_y = int(scanner_settings["vertical_opening_angel"]) if scanner_settings is not None else self.fov_y
         
-        fx_value = width / (2 * math.tan(math.radians(FOV / 2)))
-        fy_value = height / (2 * math.tan(math.radians(FOV / 2)))
+        fx_value = width / (2 * math.tan(math.radians(fov_x / 2)))
+        fy_value = height / (2 * math.tan(math.radians(fov_y / 2)))
         
         fx = torch.tensor([[fx_value]], device='cuda:0')
         fy = torch.tensor([[fy_value]], device='cuda:0')
         cx = torch.tensor([[width / 2]], device='cuda:0')
         cy = torch.tensor([[height / 2]], device='cuda:0')
-        
-        #  value_if_true if condition else value_if_false
         
         camera = Cameras(
             camera_to_worlds=c2w,
