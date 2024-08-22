@@ -107,11 +107,8 @@ class RenderStateMachine(threading.Thread):
         self.fov_y = 1
         self.width = 2
         self.height = 1
-        self.pixel_area = 1
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
-        self.frame_factor = 1
-        # self.translate_pos_from_omnivers = (1, -2, 10) # cube_interference
 
         try:
             with open(self.viewer.dataparser_transforms_path) as f: #type: ignore
@@ -295,21 +292,19 @@ class RenderStateMachine(threading.Thread):
     def generate_lidar_gui(self) -> None:
         '''Add GUI elements for LiDAR'''
         
-        # x_omni, y_omni, z_omni = self.translate_pos_from_omnivers
-            
+        viser = self.viewer.viser_server
         #TODO: explain path in documentation
-        self.perspectiv = self.viewer.viser_server.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(self.x_omni*self.frame_factor, self.y_omni*self.frame_factor, self.z_omni*self.frame_factor))
+        self.perspectiv = viser.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(self.x_omni, self.y_omni, self.z_omni))
         
+        with viser.add_gui_folder("Perspectiv Position"):
+            self.perspectiv_pos_x = viser.add_gui_slider("Pos X", -10, 10, 0.01, 1)
+            self.perspectiv_pos_y = viser.add_gui_slider("Pos Y", -10, 10, 0.01, 1)
+            self.perspectiv_pos_z = viser.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.5)
         
-        with self.viewer.viser_server.add_gui_folder("Perspectiv Position"):
-            self.perspectiv_pos_x = self.viewer.viser_server.add_gui_slider("Pos X", -10, 10, 0.01, 1)
-            self.perspectiv_pos_y = self.viewer.viser_server.add_gui_slider("Pos Y", -10, 10, 0.01, 1)
-            self.perspectiv_pos_z = self.viewer.viser_server.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 1.5)
-        
-        with self.viewer.viser_server.add_gui_folder("Perspectiv Orientation"):
-            self.perspectiv_wxyz_x = self.viewer.viser_server.add_gui_slider("Rot X", -180, 180, 0.1, -90)
-            self.perspectiv_wxyz_y = self.viewer.viser_server.add_gui_slider("Rot Y", -180, 180, 0.1, 0)
-            self.perspectiv_wxyz_z = self.viewer.viser_server.add_gui_slider("Rot Z", -180, 180, 0.1, 90)
+        with viser.add_gui_folder("Perspectiv Orientation"):
+            self.perspectiv_wxyz_x = viser.add_gui_slider("Rot X", -180, 180, 0.1, -90)
+            self.perspectiv_wxyz_y = viser.add_gui_slider("Rot Y", -180, 180, 0.1, 0)
+            self.perspectiv_wxyz_z = viser.add_gui_slider("Rot Z", -180, 180, 0.1, 90)
         
         with open('../nerfstudio/lidar_settings.json') as f:
             lidar_data = json.load(f)
@@ -317,43 +312,43 @@ class RenderStateMachine(threading.Thread):
         for lidar in lidar_data:
             scanner_settings = lidar_data[lidar]
             
-            with self.viewer.viser_server.add_gui_folder(lidar_data[lidar]["name"], expand_by_default=False):
-                self.viewer.viser_server.add_gui_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
-                self.viewer.viser_server.add_gui_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(True, scanner_settings=scanner_settings))
-                self.viewer.viser_server.add_gui_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
+            with viser.add_gui_folder(lidar_data[lidar]["name"], expand_by_default=False):
+                # viser.add_gui_text("desc", lidar_data[lidar]["description"])
+                viser.add_gui_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
+                viser.add_gui_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
+                viser.add_gui_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
                 
-        with self.viewer.viser_server.add_gui_folder("Dev Options", expand_by_default=False):
-            with self.viewer.viser_server.add_gui_folder("Camera Options"):
-                self.viewer.viser_server.add_gui_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
-                self.viewer.viser_server.add_gui_button("Perspectiv To Viser Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
+        with viser.add_gui_folder("Dev Options", expand_by_default=False):
+            with viser.add_gui_folder("Camera Options"):
+                viser.add_gui_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
+                viser.add_gui_button("Perspectiv To Viser Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
                 
-            with self.viewer.viser_server.add_gui_folder("Debugging"):
-                self.viewer.viser_server.add_gui_button("Show all samples per ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
-                self.viewer.viser_server.add_gui_button("Print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
-                self.viewer.viser_server.add_gui_button("Print single ray inf.", color="red").on_click(lambda _: self._scan_density())
-                self.viewer.viser_server.add_gui_button("Take screenshot", color="green").on_click(lambda _: self.take_screenshot())
+            with viser.add_gui_folder("Debugging"):
+                viser.add_gui_button("Show all samples per ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
+                viser.add_gui_button("Print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
+                viser.add_gui_button("Print single ray inf.", color="red").on_click(lambda _: self._scan_density())
+                viser.add_gui_button("Take screenshot", color="green").on_click(lambda _: self.take_screenshot())
                 
-            with self.viewer.viser_server.add_gui_folder("Density Options"):
-                self.viewer.viser_server.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
-                self.viewer.viser_server.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
-                self.viewer.viser_server.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(True))
-                self.viewer.viser_server.add_gui_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
-                self.viewer.viser_server.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
+            with viser.add_gui_folder("Density Options"):
+                viser.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
+                viser.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
+                viser.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(plot_density=True))
+                viser.add_gui_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
+                viser.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
                 
-            with self.viewer.viser_server.add_gui_folder("Density Settings"):
-                self.perspectiv_fov_x = self.viewer.viser_server.add_gui_slider("FOV X", 0, 360, 1, 30)
-                self.perspectiv_heigth = self.viewer.viser_server.add_gui_slider("Perspectiv Height", 1, 5000, 1, 1)
-                self.perspectiv_fov_y = self.viewer.viser_server.add_gui_slider("FOV Y", 0, 360, 1, 30)
-                self.perspectiv_width = self.viewer.viser_server.add_gui_slider("Perspectiv Width", 1, 5000, 1, 2)
-                # self.perspectiv_pixel_area = self.viewer.viser_server.add_gui_slider("Pixel Area", 0, 10, 0.1, 1)
+            with viser.add_gui_folder("Density Settings"):
+                self.perspectiv_fov_x = viser.add_gui_slider("FOV X", 0, 360, 1, 30)
+                self.perspectiv_heigth = viser.add_gui_slider("Perspectiv Height", 1, 5000, 1, 1)
+                self.perspectiv_fov_y = viser.add_gui_slider("FOV Y", 0, 360, 1, 30)
+                self.perspectiv_width = viser.add_gui_slider("Perspectiv Width", 1, 5000, 1, 2)
                 
-            with self.viewer.viser_server.add_gui_folder("ID Settings"):
-                self.ray_id_slider = self.viewer.viser_server.add_gui_slider("Ray ID", 0, 10000, 1, 0)
-                self.side_id_slider = self.viewer.viser_server.add_gui_slider("Side ID", 0, 10000, 1, 0)
+            with viser.add_gui_folder("ID Settings"):
+                self.ray_id_slider = viser.add_gui_slider("Ray ID", 0, 10000, 1, 0)
+                self.side_id_slider = viser.add_gui_slider("Side ID", 0, 10000, 1, 0)
 
 
-            with self.viewer.viser_server.add_gui_folder("Density Threshold"):
-                self.threshold_slider = self.viewer.viser_server.add_gui_slider("Threshold", -1000000, 1000000, 0.001, 0)
+            with viser.add_gui_folder("Density Threshold"):
+                self.threshold_slider = viser.add_gui_slider("Threshold", -1000000, 1000000, 0.001, 0)
                 
             self.perspectiv_pos_x.on_update(lambda _: self.update_cube())
             self.perspectiv_pos_y.on_update(lambda _: self.update_cube())
@@ -370,7 +365,6 @@ class RenderStateMachine(threading.Thread):
             self.perspectiv_fov_y.on_update(lambda _: setattr(self, "fov_y", self.perspectiv_fov_y.value))
             self.perspectiv_heigth.on_update(lambda _: setattr(self, "height", self.perspectiv_heigth.value))
             self.perspectiv_width.on_update(lambda _: setattr(self, "width", self.perspectiv_width.value))
-            self.perspectiv_pixel_area.on_update(lambda _: setattr(self, "pixel_area", self.perspectiv_pixel_area.value))
 
     def take_screenshot(self):
         import pyautogui
@@ -404,15 +398,11 @@ class RenderStateMachine(threading.Thread):
         Debugging.log("ray_id: ", self.ray_id)
     
     def update_cube(self):
-        # x_omni, y_omni, z_omni = self.translate_pos_from_omnivers
         self.perspectiv.wxyz = R.from_euler('xyz', [self.perspectiv_wxyz_x.value, self.perspectiv_wxyz_y.value, self.perspectiv_wxyz_z.value], degrees=True).as_quat()
-        self.perspectiv.position = (self.perspectiv_pos_x.value + self.x_omni * self.frame_factor, self.perspectiv_pos_y.value + self.y_omni * self.frame_factor, self.perspectiv_pos_z.value + self.z_omni * self.frame_factor)
+        self.perspectiv.position = (self.perspectiv_pos_x.value + self.x_omni, self.perspectiv_pos_y.value + self.y_omni, self.perspectiv_pos_z.value + self.z_omni)
 
-    
     def _scan_density(self) -> None:
             print_list = []
-            # x_t, y_t, z_t = self.translate_pos_from_omnivers
-            
             for side in range(4):
                 if side == 0:
                     self.perspectiv.position = 1 + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
@@ -451,7 +441,7 @@ class RenderStateMachine(threading.Thread):
                             times=torch.tensor([[0.]], device='cuda:0')
                         )
                         assert isinstance(camera, Cameras)
-                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=self.pixel_area, width=self.width, height=self.height)
+                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
 
                         all_densities = []
                         all_density_locations = []
@@ -498,22 +488,70 @@ class RenderStateMachine(threading.Thread):
                 csvwriter.writerow(row)
         
       
-    def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False, debugging = False, scanner_settings = None) -> None:
+    # def _show_density(self, plot_density: bool = False, clickable: bool = False, showNearesDensity = False, showSingelRayInf = False, debugging = False, scanner_settings: None | str = None) -> None:
+    def _show_density(self, **kwargs) -> None:
         """Show the density in the viewer
 
-        Args:
-            density_location: the density location
-        """                   
+        kwargs:
+            plot_density: bool = False -> if the density should be plotted
+            clickable: bool = False -> if every point should be clickable (very slow)
+            showNearesDensity: bool = False -> show the nearesDenstiy to 1
+            showSingelRayInf: bool = False -> Save the information of a single ray
+            debugging: bool = False -> Show all points of the density
+            scanner_settings: None | str = None -> the settings of the lidar scanner
+        """
+        
+        plot_density = None
+        clickable = None
+        showNearesDensity = None
+        showSingelRayInf = None
+        debugging = None
+        scanner_settings = None
+        int_scanner_settings = {}
+        
+        for key, value in kwargs.items():
+            if key == "plot_density":
+                plot_density = value
+            elif key == "clickable":
+                clickable = value
+            elif key == "showNearesDensity":
+                showNearesDensity = value
+            elif key == "showSingelRayInf":
+                showSingelRayInf = value
+            elif key == "debugging":
+                debugging = value
+            elif key == "scanner_settings":
+                scanner_settings = value
+                for key in scanner_settings:
+                    if key == "name" or key == "description":
+                        continue
+                    int_scanner_settings[key] = float(scanner_settings[key])
+        
         Rv = vtf.SO3(wxyz=self.perspectiv.wxyz)
         Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
         Rv = torch.tensor(Rv.as_matrix())
         origin = torch.tensor(self.perspectiv.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
-
-        height = int(scanner_settings["vertical_opening_angel"] / scanner_settings["angle_resolution"]) if scanner_settings is not None else self.height
-        width = int(scanner_settings["horizontal_opening_angel"] / scanner_settings["angle_resolution"]) if scanner_settings is not None else self.width
-        fov_x = int(scanner_settings["horizontal_opening_angel"]) if scanner_settings is not None else self.fov_x
-        fov_y = int(scanner_settings["vertical_opening_angel"]) if scanner_settings is not None else self.fov_y
+        
+        if int_scanner_settings:
+            if int_scanner_settings["vertical_opening_angel"] != 1:
+                height = int(int_scanner_settings["vertical_opening_angel"] / int_scanner_settings["angle_resolution"])
+            else:
+                height = 1
+            if int_scanner_settings["horizontal_opening_angel"] != 1:
+                width = int(int_scanner_settings["horizontal_opening_angel"] / int_scanner_settings["angle_resolution"])
+            else:
+                width = 1
+            fov_x = int_scanner_settings["horizontal_opening_angel"]
+            fov_y = int_scanner_settings["vertical_opening_angel"]
+        else:
+            height = self.height
+            width = self.width
+            fov_x = self.fov_x
+            fov_y = self.fov_y
+        
+        Debugging.log("height: ", height)
+        Debugging.log("width: ", width)
         
         fx_value = width / (2 * math.tan(math.radians(fov_x / 2)))
         fy_value = height / (2 * math.tan(math.radians(fov_y / 2)))
@@ -537,7 +575,7 @@ class RenderStateMachine(threading.Thread):
         )
         
         assert isinstance(camera, Cameras)
-        outputs = self.viewer.get_model().get_outputs_for_camera(camera, pixel_area=None, width=self.width, height=self.height)
+        outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
         # Extrahiere die Dichtewerte und Dichtepositionen
         all_densities = []
         all_density_locations = []
