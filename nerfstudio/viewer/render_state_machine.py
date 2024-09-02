@@ -110,11 +110,13 @@ class RenderStateMachine(threading.Thread):
         self.mesh_objs = []
         self.viewer.viser_server.add_gui_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
 
+        dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
+        
         try:
             with open(self.viewer.dataparser_transforms_path) as f: #type: ignore
                 dataparser_transforms = json.load(f)
-        except FileNotFoundError:
-            dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
+        except:
+            print("No dataparser_transforms.json found")
         
         self.translate_pos_from_omnivers = (dataparser_transforms["transform"][0][3], dataparser_transforms["transform"][1][3], dataparser_transforms["transform"][2][3])
         self.x_omni, self.y_omni, self.z_omni = self.translate_pos_from_omnivers
@@ -309,15 +311,15 @@ class RenderStateMachine(threading.Thread):
         with open('../nerfstudio/lidar_settings.json') as f:
             lidar_data = json.load(f)
             
+        self.angle_resolution_dropdown = viser.add_gui_dropdown("Angle Resolution", ["0.125", "0.25", "0.5", "1"], "1")
+        
         for lidar in lidar_data:
             scanner_settings = lidar_data[lidar]
-            
             with viser.add_gui_folder(lidar_data[lidar]["name"], expand_by_default=False):
-                # viser.add_gui_text("desc", lidar_data[lidar]["description"])
                 viser.add_gui_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
                 viser.add_gui_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
                 viser.add_gui_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
-                
+
         with viser.add_gui_folder("Dev Options", expand_by_default=False):
             with viser.add_gui_folder("Camera Options"):
                 viser.add_gui_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
@@ -374,7 +376,7 @@ class RenderStateMachine(threading.Thread):
         file_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/screenshots/single_ray_density/"
         screenshot = pyautogui.screenshot()
         
-        crop_size = 1000  # 50 pixels in all directions means a total of 100x100 pixels
+        crop_size = 300  # 50 pixels in all directions means a total of 100x100 pixels
 
         # Get the dimensions of the screenshot
         width, height = screenshot.size
@@ -523,7 +525,7 @@ class RenderStateMachine(threading.Thread):
             elif key == "scanner_settings":
                 scanner_settings = value
                 for key in scanner_settings:
-                    if key == "name" or key == "description":
+                    if key == "name" or key == "description" or key == "angle_resolution":
                         continue
                     int_scanner_settings[key] = float(scanner_settings[key])
         
@@ -533,13 +535,14 @@ class RenderStateMachine(threading.Thread):
         origin = torch.tensor(self.perspectiv.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
         
+        print(self.angle_resolution_dropdown.value)
         if int_scanner_settings:
             if int_scanner_settings["vertical_opening_angel"] != 1:
-                height = int(int_scanner_settings["vertical_opening_angel"] / int_scanner_settings["angle_resolution"])
+                height = int(int_scanner_settings["vertical_opening_angel"] / float(self.angle_resolution_dropdown.value))
             else:
                 height = 1
             if int_scanner_settings["horizontal_opening_angel"] != 1:
-                width = int(int_scanner_settings["horizontal_opening_angel"] / int_scanner_settings["angle_resolution"])
+                width = int(int_scanner_settings["horizontal_opening_angel"] / float(self.angle_resolution_dropdown.value))
             else:
                 width = 1
             fov_x = int_scanner_settings["horizontal_opening_angel"]
@@ -550,9 +553,6 @@ class RenderStateMachine(threading.Thread):
             fov_x = self.fov_x
             fov_y = self.fov_y
         
-        Debugging.log("height: ", height)
-        Debugging.log("width: ", width)
-        
         fx_value = width / (2 * math.tan(math.radians(fov_x / 2)))
         fy_value = height / (2 * math.tan(math.radians(fov_y / 2)))
         
@@ -560,7 +560,6 @@ class RenderStateMachine(threading.Thread):
         fy = torch.tensor([[fy_value]], device='cuda:0')
         cx = torch.tensor([[width / 2]], device='cuda:0')
         cy = torch.tensor([[height / 2]], device='cuda:0')
-        
         camera = Cameras(
             camera_to_worlds=c2w,
             fx=fx,
