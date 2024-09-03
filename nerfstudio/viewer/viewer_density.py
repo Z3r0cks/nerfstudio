@@ -28,35 +28,19 @@ import viser.theme
 import viser.transforms as vtf
 from typing_extensions import assert_never
 #-------------------------------------------------------------
-import matplotlib.pyplot as plt
-plt.switch_backend('agg')
-# import plotly.graph_objects as go
-
-# from nerfstudio.cameras.camera_optimizers import CameraOptimizer
 from nerfstudio.cameras.cameras import CameraType
 from nerfstudio.configs import base_config as cfg
-# from nerfstudio.data.datasets.base_dataset import InputDataset
 from nerfstudio.models.base_model import Model
 from nerfstudio.models.splatfacto import SplatfactoModel
 from nerfstudio.pipelines.base_pipeline import Pipeline
 from nerfstudio.utils.decorators import check_main_thread, decorate_all
-# from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName
 from nerfstudio.viewer.control_panel import ControlPanel
-# from nerfstudio.viewer.export_panel import populate_export_tab
 from nerfstudio.viewer.render_panel import populate_render_tab
-from nerfstudio.viewer.render_state_machine import RenderAction, RenderStateMachine
+from nerfstudio.viewer.render_state_machine_lidar import RenderAction, RenderStateMachine
 from nerfstudio.viewer.utils import CameraState, parse_object
 from nerfstudio.viewer.viewer_elements import ViewerControl, ViewerElement
 from nerfstudio.viewer_legacy.server import viewer_utils
-#-------------------------------------------------------------
-# from nerfstudio.fields.base_field import Field
-# from nerfstudio.fields.nerfacto_field import NerfactoField
-# from nerfstudio.fields.density_fields import HashMLPDensityField
-from nerfstudio.cameras.rays import Frustums, RaySamples, RayBundle
-# from mpl_toolkits.mplot3d import Axes3D
-# from nerfstudio.utils.debugging import Debugging
-# from scipy.spatial.transform import Rotation as R
-from nerfstudio.viewer.render_state_machine import RenderAction
+from nerfstudio.viewer.render_state_machine_lidar import RenderAction
 
 # if TYPE_CHECKING:
 #     from nerfstudio.engine.trainer import Trainer
@@ -177,40 +161,8 @@ class ViewerDensity:
         self.viser_server.on_client_disconnect(self.handle_disconnect)
         self.viser_server.on_client_connect(self.handle_new_client)
 
-        # # Populate the header, which includes the pause button, train cam button, and stats
-        # self.pause_train = self.viser_server.add_gui_button(
-        #     label="Pause Training", disabled=False, icon=viser.Icon.PLAYER_PAUSE_FILLED
-        # )
-        
-        
-        # self.pause_train.on_click(lambda _: self.toggle_pause_button())
-        # self.pause_train.on_click(lambda han: self._toggle_training_state(han))
-        # self.resume_train = self.viser_server.add_gui_button(
-        #     label="Resume Training", disabled=False, icon=viser.Icon.PLAYER_PLAY_FILLED
-        # )
-        # self.resume_train.on_click(lambda _: self.toggle_pause_button())
-        # self.resume_train.on_click(lambda han: self._toggle_training_state(han))
-        # self.resume_train.visible = False
-        # Add buttons to toggle training image visibility
-        # self.hide_images = self.viser_server.add_gui_button(
-        #     label="Hide Train Cams", disabled=False, icon=viser.Icon.EYE_OFF, color=None
-        # )
-        # self.hide_images.on_click(lambda _: self.set_camera_visibility(False))
-        # self.hide_images.on_click(lambda _: self.toggle_cameravis_button())
-        # self.show_images = self.viser_server.add_gui_button(
-        #     label="Show Train Cams", disabled=False, icon=viser.Icon.EYE, color=None
-        # )
-        # self.show_images.on_click(lambda _: self.set_camera_visibility(True))
-        # self.show_images.on_click(lambda _: self.toggle_cameravis_button())
-        # self.show_images.visible = False
         mkdown = self.make_stats_markdown(0, "0x0px")
         self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
-        # self.box = self.viser_server.add_box(name="box", color=(43, 42, 65), dimensions=(.2, .1, .1), wxyz=(1, 0, 0, 0), position=(1.50, 0.5, -3.65))
-        #------------------------------------------------------
-
-        # self.viser_server.add_gui_button("Add GUI").on_click(lambda _: self.add_gui())        
-        
-        #------------------------------------------------------
         
         tabs = self.viser_server.add_gui_tab_group()
         control_tab = tabs.add_tab("Control", viser.Icon.SETTINGS)
@@ -230,10 +182,6 @@ class ViewerDensity:
                 self.viser_server, config_path, self.datapath, self.control_panel
             )
 
-        # with tabs.add_tab("Export", viser.Icon.PACKAGE_EXPORT):
-        #     populate_export_tab(self.viser_server, self.control_panel, config_path, self.pipeline.model)
-
-        # Keep track of the pointers to generated GUI folders, because each generated folder holds a unique ID.
         viewer_gui_folders = dict()
         
         def nested_folder_install(folder_labels: List[str], prev_labels: List[str], element: ViewerElement):
@@ -243,18 +191,6 @@ class ViewerDensity:
                 prev_cb = element.cb_hook
                 element.cb_hook = lambda element: [prev_cb(element), self._trigger_rerender()]
             else:
-                # recursively create folders
-                # If the folder name is "Custom Elements/a/b", then:
-                #   in the beginning: folder_path will be
-                #       "/".join([] + ["Custom Elements"]) --> "Custom Elements"
-                #   later, folder_path will be
-                #       "/".join(["Custom Elements"] + ["a"]) --> "Custom Elements/a"
-                #       "/".join(["Custom Elements", "a"] + ["b"]) --> "Custom Elements/a/b"
-                #  --> the element will be installed in the folder "Custom Elements/a/b"
-                #
-                # Note that the gui_folder is created only when the folder is not in viewer_gui_folders,
-                # and we use the folder_path as the key to check if the folder is already created.
-                # Otherwise, use the existing folder as context manager.
                 folder_path = "/".join(prev_labels + [folder_labels[0]])
                 if folder_path not in viewer_gui_folders:
                     viewer_gui_folders[folder_path] = self.viser_server.add_gui_folder(folder_labels[0])
@@ -296,232 +232,7 @@ class ViewerDensity:
                 visible=False,  # Hidden by default.
             )
         self.ready = True
-
-    #------------------------------------------------------ 
-    # def add_gui(self) -> None:
-    #     self.box = self.viser_server.add_box("box", (43, 42, 65), (.2, .1, .1), (1, 0, 0, 0), (1.50, 0.5, -3.65))
-    #     self.box_pos_x = self.viser_server.add_gui_slider("Pos X", -4, 4, 0.01, 1.50)
-    #     self.box_pos_y = self.viser_server.add_gui_slider("Pos Y", -4, 4, 0.01, 0.5)
-    #     self.box_pos_z = self.viser_server.add_gui_slider("Pos Z", -4, 4, 0.01, -3.65)
         
-    #     self.box_pos_x.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
-    #     self.box_pos_y.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
-    #     self.box_pos_z.on_update(lambda _: setattr(self.box, 'position', (self.box_pos_x.value, self.box_pos_y.value, self.box_pos_z.value)))
-
-    #     self.box_wxyz_x = self.viser_server.add_gui_slider("X", -180, 180, 0.1, 0)
-    #     self.box_wxyz_y = self.viser_server.add_gui_slider("Y", -180, 180, 0.1, 0)
-    #     self.box_wxyz_z = self.viser_server.add_gui_slider("Z", -180, 180, 0.1, 0)
-        
-    #     self.box_wxyz_x.on_update(lambda _: self.from_eul_to_quad())
-    #     self.box_wxyz_y.on_update(lambda _: self.from_eul_to_quad())
-        # self.box_wxyz_z.on_update(lambda _: self.from_eul_to_quad())
-        
-    #     self.viser_server.add_gui_button("Render in Viser", color="pink").on_click(lambda _: self.get_density(self.box.position))
-
-        # self.viser_server.add_frame(
-        #     "/tree",
-        #     wxyz=(1.0, 0.0, 0.0, 0.0),
-        #     position=(0, 0, 0),
-        # )   
-    
-    def get_density(self, origin) -> None:
-        # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        clients = self.viser_server.get_clients()
-        # clients.keys()
-        for id in clients:
-            camera_state = self.get_camera_state(clients[id])
-            # Debugging.log("camera_state", camera_state)
-            self.render_statemachines[id].action(RenderAction("move", camera_state))
-        # self.render_statemachines.
-        # num_rays = 15
-        # rotation = R.from_quat(self.box.wxyz)
-        
-        # base_direction = torch.tensor([0, 0, 1], device=device).unsqueeze(0).repeat(num_rays, 1)
-        # rotated_directions_np = rotation.apply(base_direction.cpu().numpy())
-        # rotated_directions = torch.tensor(rotated_directions_np, device=device).float()
-        # directions = rotated_directions / torch.norm(rotated_directions, dim=1, keepdim=True)
-        # origin_tensor = torch.tensor(origin, device=device).unsqueeze(0).repeat(num_rays, 1).float()
-        # pixel_area = torch.ones((num_rays, 1), device=device)  # area of pixel with 1 m distance from origin
-        
-        # # optional attriutes
-        # camera_indices = torch.randint(low=0, high=5, size=(num_rays, 1), device=device)
-        # nears = torch.full((num_rays, 1), 0.05, device=device) # begin from sampling alont the rays
-        # fars = torch.full((num_rays, 1), 1000.0, device=device) * 2  # end
-
-        # # create frustum
-        
-        # frustum = Frustums(directions=directions, origins=origin_tensor, starts=nears, ends=fars, pixel_area=pixel_area)
-        
-        # ray_samples = RaySamples(frustum)
-        
-        # # create ray bundle
-        # ray_bundle = RayBundle(
-        #     origins=origin_tensor,
-        #     directions=directions,
-        #     pixel_area=pixel_area,
-        #     camera_indices=camera_indices,
-        #     nears=nears,
-        #     fars=fars,
-        # )
-
-        # model = self.pipeline.model.to(device)
-        # model.get_outputs(origin)
-        # outputs = model.get_outputs(ray_bundle)
-        
-        # density = torch.Tensor(outputs["density"])  # Convert output to torch.Tensor
-        # density_locations  = model.get_sample_locations()
-        # field = model.get_field()
-        # density, base_mlp_out = field.get_density(ray_samples)
-
-        # sample_locations = field.get_sample_loaction()
-        # self.test_visualize_density(sample_locations)
-        # self.visualize_density_viser(ray_bundle, density)
-
-    def test_visualize_density(self, sample_locations) -> None:
-        sample_locations = sample_locations.cpu()
-        for ray_idx, ray in enumerate(sample_locations):
-            for sample_idx, sample in enumerate(ray):
-                sphere_name = f"ray_{ray_idx}_sample_{sample_idx}"
-                
-                # detach the tensor from the computation graph
-                sample_detached = sample.detach() # Detach the tensor
-                sample_tuple = tuple(sample_detached.numpy()) # Convert to NumPy array then to tuple
-                self.viser_server.add_icosphere(
-                    name=sphere_name,
-                    subdivisions=2,
-                    wxyz= (0, 0, 0, 0),
-                    radius=0.005,
-                    color=(155, 0, 0),
-                    position=sample_tuple,  # Konvertiere NumPy Array zu Tuple
-                    visible=True
-                )
-        
-            
-    def visualize_density_viser(self, ray_bundle: RayBundle, density: torch.Tensor) -> None:
-        device = density.device
-        density = density.squeeze()  # remove singular dimension
-        max_density = density.max()
-        density_normalized = density / max_density
-        
-        # find the first point where density exceeds the threshold
-        density_threshold = 0.3
-        threshold_mask = density_normalized > density_threshold
-        first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
-        
-        # ensure you consider cases where no points exceed by checking the condition
-        valid_mask = threshold_mask.any(dim=1)
-        first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
-        
-        # filter all points after the threshold exceedance
-        valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
-        
-        # calculate the ray points only up to the first exceedance
-        for i in range(ray_bundle.origins.shape[0]):  # iterate over all rays
-            if ray_bundle.nears is not None and ray_bundle.fars is not None:
-                near = ray_bundle.nears[i].item()
-                far = ray_bundle.fars[i].item()
-                ray_length = torch.linspace(near, far, density.shape[1], device=device)
-            
-            for j in range(density.shape[1]):  # iterate over points in each ray
-                if valid_points_mask[i, j]:
-                    point = ray_bundle.origins[i] + ray_bundle.directions[i] * ray_length[j]
-                    normalized_density = density_normalized[i, j].item()
-                    
-                    # Define the color based on density, converting it to RGB
-                    color_intensity = int(155 * normalized_density)
-                    color = (color_intensity, 0, 0)  # Red color intensity based on density
-                    # Add sphere at this point
-                    sphere_name = f"/ray_{i}_point_{j}"
-                    self.viser_server.add_icosphere(
-                        name=sphere_name,
-                        radius=0.01  ,  # smaller radius for visualiza  tion
-                        color=color,
-                        subdivisions=2,
-                        wxyz= (0, 0, 0, 0), 
-                        position=point.cpu().detach().numpy(),
-                        visible=True
-                    )
-    
-    # def from_eul_to_quad(self):
-    #     self.box.wxyz = R.from_euler('xyz', [self.box_wxyz_x.value, self.box_wxyz_y.value, self.box_wxyz_z.value], degrees=True).as_quat()
-    
-    # def visualize_density_histogram(self, density: torch.Tensor) -> None:
-    #     # Density histogram along the rays
-    #     density = density.cpu().detach().numpy().squeeze()
-    #     fig = go.Figure()
-    #     for i, single_ray_density in enumerate(density):
-    #         fig.add_trace(go.Scatter(y=single_ray_density, mode='lines', name=f'Ray {i}'))        
-    #     fig.update_layout(title='Density along rays', 
-    #                       xaxis_title='Sample along ray', 
-    #                       yaxis_title='Density',
-    #                       legend_title='Ray Index')
-    #     fig.show()
-        
-    # def visualize_density_3d(self, origins, direction, density: torch.Tensor) -> None:
-    #     density_threshold = 0.3
-    #     device = density.device
-    #     density = density.squeeze() #remove singlar dimension
-    #     max_density = density.max()
-    #     density_normalized = density / max_density
-        
-    #     ray_length = torch.linspace(0, 1, density.shape[1], device=device) # generate line space along the ray
-    #     ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None] # generate points along the ray
-
-    #     # find the first point where density exceeds the threshold
-    #     threshold_mask = density_normalized > density_threshold
-    #     first_exceeds = threshold_mask.int().argmax(dim=1)  # get the index of the first exceedance
-        
-    #     # ensure you consider cases where no points exceed by checking the condition
-    #     valid_mask = threshold_mask.any(dim=1)
-    #     first_exceeds[~valid_mask] = density.shape[1] - 1  # use the last point if no exceedance
-        
-    #     # filter all points after the threshold exceedance
-    #     valid_points_mask = torch.arange(density.shape[1], device=device)[None, :] <= first_exceeds[:, None]
-        
-    #     # calculate the ray points only up to the first exceedance
-    #     ray_points = origins[:, None, :] + direction[:, None, :] * ray_length[:, None]
-    #     ray_points = ray_points[valid_points_mask]
-    #     density_normalized = density_normalized[valid_points_mask]
-        
-    #     # ürepare data for plotting
-    #     x, y, z = ray_points[..., 0].cpu().numpy(), ray_points[..., 1].cpu().numpy(), ray_points[..., 2].cpu().numpy()
-    #     color = density_normalized.detach().cpu().numpy() # color based on density
-        
-    #     # create 3d plot
-    #     trace = go.Scatter3d(
-    #         x=x.ravel(), y=y.ravel(), z=z.ravel(), # flatten the points
-    #         mode='markers',
-    #         marker = dict(
-    #             size=2,
-    #             color=color.ravel(),
-    #             colorscale='Viridis',
-    #             opacity =.8,
-    #             colorbar=dict(title='Normalized Density')
-    #         )
-    #     )
-        
-    #     layout = go.Layout(
-    #         title="3D Density Visualization",
-    #         scene=dict(
-    #             xaxis=dict(title='X'),
-    #             yaxis=dict(title='Y'),
-    #             zaxis=dict(title='Z')
-    #         )
-    #     )
-        
-    #     fig = go.Figure(data=[trace], layout=layout)
-    #     fig.show()
-    
-    #------------------------------------------------------
-    
-    # def toggle_pause_button(self) -> None:
-    #     self.pause_train.visible = not self.pause_train.visible
-    #     self.resume_train.visible = not self.resume_train.visible
-
-    # def toggle_cameravis_button(self) -> None:
-    #     self.hide_images.visible = not self.hide_images.visible
-    #     self.show_images.visible = not self.show_images.visible
-
     def make_stats_markdown(self, step: Optional[int], res: Optional[str]) -> str:
         # if either are None, read it from the current stats_markdown content
         if step is None:
@@ -584,35 +295,6 @@ class ViewerDensity:
                 camera_state = self.get_camera_state(client)
                 self.render_statemachines[client.client_id].action(RenderAction("move", camera_state))
 
-    # def set_camera_visibility(self, visible: bool) -> None:
-    #     """Toggle the visibility of the training cameras."""
-    #     with self.viser_server.atomic():
-    #         for idx in self.camera_handles:
-    #             self.camera_handles[idx].visible = visible
-
-    # def update_camera_poses(self):
-    #     # TODO this fn accounts for like ~5% of total train time
-    #     # Update the train camera locations based on optimization
-    #     assert self.camera_handles is not None
-    #     if hasattr(self.pipeline.datamanager, "train_camera_optimizer"):
-    #         camera_optimizer = self.pipeline.datamanager.train_camera_optimizer
-    #     elif hasattr(self.pipeline.model, "camera_optimizer"):
-    #         camera_optimizer = self.pipeline.model.camera_optimizer
-    #     else:
-    #         return
-    #     idxs = list(self.camera_handles.keys())
-    #     with torch.no_grad():
-    #         assert isinstance(camera_optimizer, CameraOptimizer)
-    #         c2ws_delta = camera_optimizer(torch.tensor(idxs, device=camera_optimizer.device)).cpu().numpy()
-    #     for i, key in enumerate(idxs):
-    #         # both are numpy arrays
-    #         c2w_orig = self.original_c2w[key]
-    #         c2w_delta = c2ws_delta[i, ...]
-    #         c2w = c2w_orig @ np.concatenate((c2w_delta, np.array([[0, 0, 0, 1]])), axis=0)
-    #         R = vtf.SO3.from_matrix(c2w[:3, :3])  # type: ignore
-    #         R = R @ vtf.SO3.from_x_radians(np.pi)
-    #         self.camera_handles[key].position = c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO
-    #         self.camera_handles[key].wxyz = R.wxyz
 
     def _trigger_rerender(self) -> None:
         """Interrupt current render."""
@@ -622,14 +304,6 @@ class ViewerDensity:
         for id in clients:
             camera_state = self.get_camera_state(clients[id])
             self.render_statemachines[id].action(RenderAction("move", camera_state))
-
-    # def _toggle_training_state(self, _) -> None:
-    #     """Toggle the trainer's training state."""
-    #     if self.trainer is not None:
-    #         if self.trainer.training_state == "training":
-    #             self.trainer.training_state = "paused"
-    #         elif self.trainer.training_state == "paused":
-    #             self.trainer.training_state = "training"
 
     def _output_type_change(self, _):
         self.output_type_changed = True
@@ -653,105 +327,6 @@ class ViewerDensity:
         # draw indices, roughly evenly spaced
         return np.linspace(0, total_num - 1, num_display_images, dtype=np.int32).tolist()
 
-    # def init_scene(
-    #     self,
-    #     train_dataset: InputDataset,
-    #     train_state: Literal["training", "paused", "completed"],
-    #     eval_dataset: Optional[InputDataset] = None,
-    # ) -> None:
-    #     """Draw some images and the scene aabb in the viewer.
-
-    #     Args:
-    #         dataset: dataset to render in the scene
-    #         train_state: Current status of training
-    #     """
-        #viewer_state.init_scene(
-            # train_dataset=pipeline.datamanager.train_dataset,
-            # train_state="completed",
-            # eval_dataset=pipeline.datamanager.eval_dataset,
-        #)
-        # open("C:/Users/tkasepa/Desktop/Thesisinhalte/pipeline/viewer/image_indices.txt", "w").write(str(image_indices))
-        
-        # draw the training cameras and images
-        # self.camera_handles: Dict[int, viser.CameraFrustumHandle] = {}
-        # self.original_c2w: Dict[int, np.ndarray] = {}
-        # image_indices = self._pick_drawn_image_idxs(len(train_dataset))
-        # for idx in image_indices: #for every image in the dataset
-        #     image = train_dataset[idx]["image"] # image matrix with normalized rgba pixel values
-        #     camera = train_dataset.cameras[idx]
-        #     image_uint8 = (image * 255).detach().type(torch.uint8)
-        #     image_uint8 = image_uint8.permute(2, 0, 1)
-
-        #     # torchvision can be slow to import, so we do it lazily.
-        #     import torchvision
-
-        #     image_uint8 = torchvision.transforms.functional.resize(image_uint8, 100, antialias=None)  # type: ignore
-        #     image_uint8 = image_uint8.permute(1, 2, 0)
-        #     image_uint8 = image_uint8.cpu().numpy()
-        #     c2w = camera.camera_to_worlds.cpu().numpy()
-        #     R = vtf.SO3.from_matrix(c2w[:3, :3])
-        #     R = R @ vtf.SO3.from_x_radians(np.pi)
-        #     camera_handle = self.viser_server.add_camera_frustum(
-        #         name=f"/cameras/camera_{idx:05d}",
-        #         fov=float(2 * np.arctan(camera.cx / camera.fx[0])),
-        #         scale=self.config.camera_frustum_scale,
-        #         aspect=float(camera.cx[0] / camera.cy[0]),
-        #         image=image_uint8,
-        #         wxyz=R.wxyz,
-        #         position=c2w[:3, 3] * VISER_NERFSTUDIO_SCALE_RATIO,
-        #     )
-
-        #     @camera_handle.on_click
-        #     def _(event: viser.SceneNodePointerEvent[viser.CameraFrustumHandle]) -> None:
-        #         with event.client.atomic():
-        #             event.client.camera.position = event.target.position
-        #             event.client.camera.wxyz = event.target.wxyz
-
-        #     self.camera_handles[idx] = camera_handle
-        #     self.original_c2w[idx] = c2w
-
-        # self.train_state = train_state
-        # self.train_util = 0.9
-
-    # def update_scene(self, step: int, num_rays_per_batch: Optional[int] = None) -> None:
-    #     """updates the scene based on the graph weights
-
-    #     Args:
-    #         step: iteration step of training
-    #         num_rays_per_batch: number of rays per batch, used during training
-    #     """
-    #     self.step = step
-
-    #     if len(self.render_statemachines) == 0:
-    #         return
-    #     # this stops training while moving to make the response smoother
-    #     while time.time() - self.last_move_time < 0.1:
-    #         time.sleep(0.05)
-    #     if self.trainer is not None and self.trainer.training_state == "training" and self.train_util != 1:
-    #         if (
-    #             EventName.TRAIN_RAYS_PER_SEC.value in GLOBAL_BUFFER["events"]
-    #             and EventName.VIS_RAYS_PER_SEC.value in GLOBAL_BUFFER["events"]
-    #         ):
-    #             train_s = GLOBAL_BUFFER["events"][EventName.TRAIN_RAYS_PER_SEC.value]["avg"]
-    #             vis_s = GLOBAL_BUFFER["events"][EventName.VIS_RAYS_PER_SEC.value]["avg"]
-    #             train_util = self.train_util
-    #             vis_n = self.control_panel.max_res**2
-    #             train_n = num_rays_per_batch
-    #             train_time = train_n / train_s
-    #             vis_time = vis_n / vis_s
-
-    #             render_freq = train_util * vis_time / (train_time - train_util * train_time)
-    #         else:
-    #             render_freq = 30
-    #         if step > self.last_step + render_freq:
-    #             self.last_step = step
-    #             clients = self.viser_server.get_clients()
-    #             for id in clients:
-    #                 camera_state = self.get_camera_state(clients[id])
-    #                 if camera_state is not None:
-    #                     self.render_statemachines[id].action(RenderAction("step", camera_state))
-    #             self.update_camera_poses()
-    #             self.update_step(step)
 
     def update_colormap_options(self, dimensions: int, dtype: type) -> None:
         """update the colormap options based on the current render

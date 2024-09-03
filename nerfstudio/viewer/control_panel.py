@@ -228,7 +228,7 @@ class ControlPanel:
         self._reset_camera = viser_server.add_gui_button(
             label="Reset Up Direction",
             icon=viser.Icon.ARROW_BIG_UP_LINES,
-            color="gray",
+            color="blue",
             hint="Set the up direction of the camera orbit controls to the camera's current up direction.",
         )
         self._reset_camera.on_click(self._reset_camera_cb)

@@ -43,11 +43,6 @@ from nerfstudio.viewer.render_state_machine import RenderAction, RenderStateMach
 from nerfstudio.viewer.utils import CameraState, parse_object
 from nerfstudio.viewer.viewer_elements import ViewerControl, ViewerElement
 from nerfstudio.viewer_legacy.server import viewer_utils
-#-------------------------------------------------------------
-from nerfstudio.fields.base_field import Field
-from nerfstudio.fields.nerfacto_field import NerfactoField
-from nerfstudio.fields.density_fields import HashMLPDensityField
-from nerfstudio.cameras.rays import Frustums, RaySamples
 
 if TYPE_CHECKING:
     from nerfstudio.engine.trainer import Trainer
@@ -193,13 +188,6 @@ class Viewer:
         mkdown = self.make_stats_markdown(0, "0x0px")
         self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
         
-        #------------------------------------------------------
-        self.test_button = self.viser_server.add_gui_button(
-            label="Test Button", disabled=False, color="cyan", 
-        )
-        self.test_button.on_click(lambda _: self.print_log())
-        #------------------------------------------------------
-        
         tabs = self.viser_server.add_gui_tab_group()
         control_tab = tabs.add_tab("Control", viser.Icon.SETTINGS)
         with control_tab:
@@ -284,33 +272,6 @@ class Viewer:
                 visible=False,  # Hidden by default.
             )
         self.ready = True
-
-    #------------------------------------------------------
-    def print_log(self) -> None:
-        
-        origins = torch.tensor([[0.0, 0.0, 0.0]]) # origin of the ray in 3d
-        direction = torch.tensor([[1.0, 0.0, 0.0]]) # direction of the ray in 3d
-        
-        nun_sample = 1 # number of samples to take along the ray
-        starts = torch.zeros(nun_sample, 1)	# start of the ray
-        ends = torch.linspace(0.0, 1.0, nun_sample).view(-1, 1) # end of the ray
-        
-        # create frustrum
-        frustrum = Frustums(
-            origins=origins,
-            directions=direction,
-            starts=starts,
-            ends=ends,
-            pixel_area=torch.ones_like(starts),
-        )
-        
-        #create ray samples
-        ray_samples = RaySamples(
-            frustums=frustrum
-        )
-        field = Field()
-        density, _ = field.get_density(ray_samples)
-    #------------------------------------------------------
     
     def toggle_pause_button(self) -> None:
         self.pause_train.visible = not self.pause_train.visible
