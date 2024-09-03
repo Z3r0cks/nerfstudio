@@ -266,8 +266,8 @@ class RenderStateMachine(threading.Thread):
         with open('../nerfstudio/lidar_settings.json') as f:
             lidar_data = json.load(f)
             
-        self.v_angle_resolution_dropdown = viser.add_gui_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
         self.h_angle_resolution_dropdown = viser.add_gui_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+        self.v_angle_resolution_dropdown = viser.add_gui_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
         
         for lidar in lidar_data:
             scanner_settings = lidar_data[lidar]
@@ -275,6 +275,7 @@ class RenderStateMachine(threading.Thread):
                 viser.add_gui_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
                 viser.add_gui_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
                 viser.add_gui_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
+                viser.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
 
         with viser.add_gui_folder("Dev Options", expand_by_default=False):
             with viser.add_gui_folder("Camera Options", expand_by_default=False):
