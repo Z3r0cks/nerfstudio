@@ -94,6 +94,7 @@ class RenderStateMachine(threading.Thread):
         self.running = True
         
         #-------------------------------------------------------------
+        self.mesaurement_point_coordinates = []
         self.ray_id = 0
         self.side_id = 0
         self.density_threshold = 0
@@ -254,9 +255,9 @@ class RenderStateMachine(threading.Thread):
         self.perspectiv = viser.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(self.x_omni, self.y_omni, self.z_omni))
         
         with viser.add_gui_folder("Perspectiv Position"):
-            self.perspectiv_pos_x = viser.add_gui_slider("Pos X", -100, 100, 0.01, 0)
-            self.perspectiv_pos_y = viser.add_gui_slider("Pos Y", -100, 100, 0.01, 0)
-            self.perspectiv_pos_z = viser.add_gui_slider("Pos Z (Height)", -100, 100, 0.01, 0)
+            self.perspectiv_pos_x = viser.add_gui_slider("Pos X", -20, 20, 0.01, 0)
+            self.perspectiv_pos_y = viser.add_gui_slider("Pos Y", -20, 20, 0.01, 0)
+            self.perspectiv_pos_z = viser.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 0)
         
         with viser.add_gui_folder("Perspectiv Orientation"):
             self.perspectiv_wxyz_x = viser.add_gui_slider("Rot X", -180, 180, 0.1, 0)
@@ -291,6 +292,7 @@ class RenderStateMachine(threading.Thread):
             with viser.add_gui_folder("Density Options"):
                 viser.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
                 viser.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
+                viser.add_gui_button("Measure Point", color="pink").on_click(lambda _: self._show_density(measure=True))
                 viser.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(plot_density=True))
                 viser.add_gui_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
                 viser.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
@@ -462,6 +464,7 @@ class RenderStateMachine(threading.Thread):
         showSingelRayInf = None
         debugging = None
         scanner_settings = None
+        measure = False
         int_scanner_settings = {}
         
         for key, value in kwargs.items():
@@ -471,6 +474,8 @@ class RenderStateMachine(threading.Thread):
                 clickable = value
             elif key == "showNearesDensity":
                 showNearesDensity = value
+            elif key == "measure":
+                measure = value
             elif key == "showSingelRayInf":
                 showSingelRayInf = value
             elif key == "debugging":
@@ -504,9 +509,6 @@ class RenderStateMachine(threading.Thread):
             width = self.width
             fov_x = self.fov_x
             fov_y = self.fov_y
-            
-        print(self.h_angle_resolution_dropdown.value)
-        print(self.v_angle_resolution_dropdown.value)
         
         fx_value = width / (2 * math.tan(math.radians(fov_x / 2)))
         fy_value = height / (2 * math.tan(math.radians(fov_y / 2)))
@@ -606,13 +608,12 @@ class RenderStateMachine(threading.Thread):
             # Debugging.log("filtered_locations", filtered_locations)
             obj = self.viewer.viser_server.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.01, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
             self.mesh_objs.append(obj)
-            
-        if clickable:
+        if clickable or measure:
             if len(self.mesh_objs) > 0:
                 self.delete_point_cloud()
                 
             for index, (location, density) in enumerate(zip(filtered_locations, filtered_densities)):
-                self.add_point_as_mesh(location, index, density)
+                self.add_point_as_mesh(location, index, density, measure=measure)
                 
     # concept of transmittance T(t), describes the probability of a photon to pass through a medium without being absorbed
     # If the transmittance is low, the photon is more likely to be absorbed. Start with transmittance = 1 and multiply it with the transmittance of each point along the ray.
@@ -666,7 +667,7 @@ class RenderStateMachine(threading.Thread):
 
         return None, None, None  # no collision found
                 
-    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.01, color= (0, 0, 255)):
+    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.01, color= (0, 0, 255), measure=False):
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -687,7 +688,11 @@ class RenderStateMachine(threading.Thread):
             position=(0, 0, 0),  # position bereits in vertices definiert
             visible=True,
         )
-        obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO, density))
+        
+        if measure:
+            obj.on_click(lambda _: self.add_distance_modal_between_points(location*VISER_NERFSTUDIO_SCALE_RATIO))
+        else:
+            obj.on_click(lambda _: self.add_distance_modal(location*VISER_NERFSTUDIO_SCALE_RATIO, density))
         
         self.mesh_objs.append(obj)
         
@@ -712,6 +717,42 @@ class RenderStateMachine(threading.Thread):
             csvwriter = csv.writer(csvfile)
             row = [self.ray_id] + position + rot + [distance, density]
             csvwriter.writerow(row)
+            
+    def add_distance_modal_between_points(self, coodinate):
+        if len(self.mesaurement_point_coordinates) == 1:
+            self.mesaurement_point_coordinates.append(coodinate)
+            x1, y1, z1 = self.mesaurement_point_coordinates[0]
+            x2, y2, z2 = self.mesaurement_point_coordinates[1]
+            distance = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
+            distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {distance:.4f}", (1, 0, 0, 0), ((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2))
+            
+            # point3 = self.perspectiv.position + (self.mesaurement_point_coordinates[1] - self.perspectiv.position) * 0.001
+            vertices = np.array([self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1], self.mesaurement_point_coordinates[0]])
+            faces = np.array([[0, 1, 2]])
+            distance_ray = self.viewer.viser_server.add_mesh_simple(
+                name="line_mesh",
+                vertices=vertices,
+                faces=faces,
+                color=(155, 0, 0),
+                wireframe=True, 
+                opacity=None,
+                material='standard',
+                flat_shading=False,
+                side='double',
+                wxyz=(1.0, 0.0, 0.0, 0.0),
+                position=(0.0, 0.0, 0.0),
+                visible=True
+            )
+            
+            self.mesh_objs.append(distance_label)
+            self.mesh_objs.append(distance_ray)
+            distance_ray.on_click(lambda _: distance_ray.remove())
+            self.mesaurement_point_coordinates = []
+        else:
+            self.mesaurement_point_coordinates.append(coodinate)
+            Debugging.log("length of mesaurement_point_coordinates: ", len(self.mesaurement_point_coordinates))
+        
+            
         
     def add_distance_modal(self, point, density):
         """ 

@@ -1,25 +1,32 @@
-import torch
-import math
+import cv2
+import os
 
-# def _compute_fov_rad(width_height, fx_fy):
-#    fov = 2 * torch.atan(width_height / (2 * fx_fy))
-#    fov_degrees = fov * (180.0 / math.pi)
-#    fov_degrees = int(round(fov_degrees.item()))
-#    if fov_degrees < 0:
-#       fov_degrees = 360 + fov_degrees
-#    return fov_degrees
+# Video-Datei laden
+video_path = 'C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/position_test/1m_chair_video/video.mp4'  # Pfad zu deinem Video
+output_folder = 'C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/position_test/1m_chair_video/frames'  # Ordner, in den die Frames gespeichert werden
 
+# Erstelle den Ordner, wenn er nicht existiert
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
 
-# print(_compute_fov_rad(torch.tensor(270), -153.2645))
-# print(_compute_fov_rad(torch.tensor(1), -0.555))
+# Video mit OpenCV öffnen
+cap = cv2.VideoCapture(video_path)
 
-height = 1
-FOV = 276
+frame_number = 0
 
+# Video-Frames durchlaufen
+while True:
+    ret, frame = cap.read()  # Frame lesen
+    if not ret:
+        break  # Beende, wenn das Video zu Ende ist
 
-if FOV > 180:
-   FOV = 360 - FOV
+    # Speichere jeden Frame als Bild
+    frame_path = os.path.join(output_folder, f'frame_{frame_number:04d}.jpg')
+    cv2.imwrite(frame_path, frame)
 
-fy_value = height / (2 * math.tan(math.radians(FOV / 2)))
+    frame_number += 1
 
-print(fy_value)
+# Freigeben des Videos
+cap.release()
+
+print(f'Extrahierte {frame_number} Frames und in {output_folder} gespeichert.')

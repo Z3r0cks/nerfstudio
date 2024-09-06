@@ -35,7 +35,7 @@ def create_transform_json(cameras):
       "fl_y": cameras["params"]["fl_y"],    
       "cx": cameras["params"]["w"] / 2,
       "cy": cameras["params"]["h"] / 2,
-      "k1": 0.017336012291600932,
+      "k1": 0.001193459470544891,
       "k2": 0.0,
       "p1": 0.0,
       "p2": 0.0,
@@ -103,33 +103,29 @@ cameras = {
    "params": {
       "h": 1920,
       "w": 2560,
-      "fl_x": 1811,
-      "fl_y": 1811,
+      "fl_x": 1213.1944165949544,
+      "fl_y": 1213.1944165949544,
       "path": "images"
    },
    "camera_list": []
 }
 
-# rotation_y = -90
-# rotation_x = -90
-# rotation_z = -135
+image_num = 47
+levels = 3
+if( image_num % levels != 0):
+   raise ValueError("Image number is not divisible by levels")
 
-image_num = 32
-levels = 2
-images_per_level = image_num / levels
+images_per_level = int(image_num / levels)
 position_degree = 360 / images_per_level
 
-height_buttom = 0.0575
-height_top = 0.427
-factorize = 4
+height_array = [.048, .474, 1.285]
+factorize = 1
 
 for j in range(levels):
-   heigth = height_buttom if j == 0 else height_top
+   height = height_array[j]
    for i in range(int(images_per_level)):
-      cameras["camera_list"].append({
-         "name": f"{i + 1:02}.jpg",
-         "pos": [np.cos(np.radians(i * position_degree))*factorize, np.sin(np.radians(i * position_degree))*factorize, heigth*factorize],
-         "rotation_list": [
+      if j != 2:
+         rotation_list = [
             {
                "rotation_axis": "y",
                "rotation_angle": (i * position_degree) - 90
@@ -139,12 +135,31 @@ for j in range(levels):
                "rotation_angle": 90
             }
          ]
+      else:
+         rotation_list = [
+            {
+               "rotation_axis": "y",
+               "rotation_angle": (i * position_degree) - 90
+            },
+            {
+               "rotation_axis": "x",
+               "rotation_angle": 90
+            },
+            {
+               "rotation_axis": "z",
+               "rotation_angle": -135
+            }
+         ]
+      cameras["camera_list"].append({
+         "name": f"{((i + 1) + (images_per_level * j)):02d}.jpg",
+         "pos": [np.cos(np.radians(i * position_degree))*factorize, np.sin(np.radians(i * position_degree))*factorize, height*factorize],
+         "rotation_list": rotation_list
       })
    
 
 matrix = create_transform_json(cameras)
 
-out_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/position_test/1m_chair/transforms.json"
+out_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/Masterthesis/position_test/1m_chair/transforms_ow2n.json"
 
 if os.path.exists(out_dir):
    os.remove(out_dir)
