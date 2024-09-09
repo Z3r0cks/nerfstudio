@@ -106,6 +106,7 @@ class RenderStateMachine(threading.Thread):
         self.mesaurement_conversion = None
         self.gui_button = self.viewer.viser_server.gui.add_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
         self.dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
+        self.compute_scale_factor = 1
         
         try:
             with open(self.viewer.dataparser_transforms_path) as f:
@@ -263,8 +264,41 @@ class RenderStateMachine(threading.Thread):
         except:
             print("Cannot remove")
     
+    def _open_calibrate_modal(self):
+        viser = self.viewer.viser_server 
+        # with viser.gui.add_modal("Calibrate"):
+        #     viser.gui.add_plotly
+        with viser.gui.add_modal("Modal example") as modal:
+            viser.gui.add_markdown("**Calibrate Distance Measurement**")
+            viser.gui.add_markdown("Coordinate Measurement Point 1:")
+            viser.gui.add_text("Point 1", self.m_point_1.value)
+            viser.gui.add_markdown("Coordinate Measurement Point 2:")
+            viser.gui.add_text("Point 1", self.m_point_2.value)
+            
+            second_modal_button = viser.gui.add_button("Use this Coordinates")
+            @second_modal_button.on_click
+            def _(_) -> None:
+                l_scene = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
+                with viser.gui.add_modal("Calibrate") as second_modal:
+                    viser.gui.add_markdown(f'Calibrate distance: {l_scene}')
+                    l_real = viser.gui.add_number("Real distance in meter:", 0, None, None, step=0.001)
+                    
+                    calibrate_button = viser.gui.add_button("Calibrate", color="green")
+                    viser.gui.add_button("Close", color="red").on_click(lambda _: second_modal.close())
+                    @calibrate_button.on_click
+                    def _(_) -> None:
+                        self.compute_scale_factor = 1
+                        self.compute_scale_factor = l_scene / l_real.value
+                        self.scale_factor_info.__setattr__("value", str(self.compute_scale_factor))
+                        modal.close()
+                        second_modal.close()
+                        
+            viser.gui.add_button("Close", color="red").on_click(lambda _: modal.close())
+                
+
+
     def generate_lidar_gui(self) -> None:
-        '''Add GUI elements for LiDAR'''
+        '''Add GUI elements for LiDAR'''    
         
         viser = self.viewer.viser_server        
         #TODO: explain path in documentation
@@ -275,7 +309,8 @@ class RenderStateMachine(threading.Thread):
             viser.gui.add_button("Measure Point 2", color="blue").on_click(lambda _: self._show_density(measure=[True, 1]))
             self.m_point_1 = viser.gui.add_text("Coord Measurement Point 1", "Not Set")
             self.m_point_2 = viser.gui.add_text("Coord Measurement Point 2", "Not Set")
-            viser.gui.add_text("Conversion", "Not Set")
+            viser.gui.add_button("Open Calibrate Modal", color="green").on_click(lambda _: self._open_calibrate_modal())
+            self.scale_factor_info =  viser.gui.add_text("Scale Factor for Measurement", str(self.compute_scale_factor))
             
             with viser.gui.add_folder("Correction", expand_by_default=False):
                 viser.gui.add_button("Delete Point 1", color="red").on_click(lambda _: self.delete_measurement_point(1))
@@ -755,13 +790,14 @@ class RenderStateMachine(threading.Thread):
     def add_distance_modal_between_points(self, coodinate, obj, point_id):
         point_button = self.m_point_2 if point_id == 1 else self.m_point_1
         if len(self.mesaurement_point_coordinates) == 1:
+            self.mesaurement_point_coordinates.append(coodinate)
             (x1, y1, z1),(x2, y2, z2) = self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[0]
             # x2, y2, z2 = self.mesaurement_point_coordinates[1]
             distance = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
             distance_label = self.viewer.viser_server.scene.add_label("distance_label", f"Distance: {distance:.4f}", (1, 0, 0, 0), ((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2))
-            
             vertices = np.array([self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1], self.mesaurement_point_coordinates[0]])
             faces = np.array([[0, 1, 2]])
+            
             distance_ray = self.viewer.viser_server.scene.add_mesh_simple(
                 name="line_mesh",
                 vertices=vertices,
@@ -783,18 +819,12 @@ class RenderStateMachine(threading.Thread):
             self.set_measurement_point(point_button, point_id, coodinate, obj)
             # self.mesaurement_point_coordinates = []
         else:
+            self.mesaurement_point_coordinates.append(coodinate)
             self.set_measurement_point(point_button, point_id, coodinate, obj)
             
     def set_measurement_point(self, point_button, point_id, coodinate, obj):
-        self.mesaurement_point_coordinates.append(coodinate)
-        Debugging.log("point_button._impl.value 1: ", point_button._impl.value)
-        point_button._impl.__setattr__("value", f"{str(coodinate)}")
+        point_button.__setattr__("value", f"{str(coodinate)}")
         obj.__setattr__("color", (255, 0, 0))
-
-        # Debugging.log("api()", api)
-        # Debugging.log("point_button._impl.value 2: ", point_button._impl.value)
-        # Debugging.log("obj: ", obj)
-        # Debugging.log("length of mesaurement_point_coordinates: ", len(self.mesaurement_point_coordinates))
         
     def add_distance_modal(self, point, density):
         """ 
@@ -807,10 +837,7 @@ class RenderStateMachine(threading.Thread):
         global_distance = self.compute_distance(self.perspectiv.position, point)
         global_density = density
         distance_label = self.viewer.viser_server.scene.add_label("distance_label", f"Distance: {global_distance:.4f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
-        # destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.08))
-        
-        # distance_label.label_size = 0.1
-        # distance_ray = self.viewer.viser_server.add_modal("Distance")
+
         point3 = self.perspectiv.position + (point - self.perspectiv.position) * 0.001
         vertices = np.array([self.perspectiv.position, point, point3])
         faces = np.array([[0, 1, 2]])
@@ -830,7 +857,6 @@ class RenderStateMachine(threading.Thread):
         )
 
         self.mesh_objs.append(distance_label)
-        # self.mesh_objs.append(destity_label)
         self.mesh_objs.append(distance_ray)
         
         distance_ray.on_click(lambda _: distance_ray.remove())
@@ -860,7 +886,7 @@ class RenderStateMachine(threading.Thread):
         a = a.cpu().numpy() if isinstance(a, torch.Tensor) else a
         b = b.cpu().numpy() if isinstance(b, torch.Tensor) else b
 
-        return (np.linalg.norm(np.array(a) - np.array(b)))
+        return (np.linalg.norm(np.array(a) - np.array(b))) / self.compute_scale_factor
     
     def set_perspectiv_camera(self, type: str):
         
