@@ -4,18 +4,18 @@
 
 | Function                            | File                                                                                           | Line |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- | ---- |
-| `_bootstrap_inner`                  | file:///C:/Users/Patri/miniconda3/envs/nerfstudio/lib/threading.py                             | 932  |
-| `_bootstrap`                        | file:///C:/Users/Patri/miniconda3/envs/nerfstudio/lib/threading.py                             | 890  |
-| `run`                               | file:///D:/Masterthesis/nerfstudio/nerfstudio/viewer/render_state_machine.py                   | 228  |
-| `render_img`                        | file:///D:/Masterthesis/nerfstudio/nerfstudio/viewer/render_state_machine.py                   | 173  |
-| `decorate_context`                  | file:///C:/Users/Patri/miniconda3/envs/nerfstudio/lib/site-packages/torch/utils/_contextlib.py | 115  |
-| `get_outputs_for_camera`            | file:///D:/Masterthesis/nerfstudio/nerfstudio/models/base_model.py                             | 173  |
-| `decorate_context`                  | file:///C:/Users/Patri/miniconda3/envs/nerfstudio/lib/site-packages/torch/utils/_contextlib.py | 115  |
-| `get_outputs_for_camera_ray_bundle` | file:///D:/Masterthesis/nerfstudio/nerfstudio/models/base_model.py                             | 195  |
-| `forward`                           | file:///D:/Masterthesis/nerfstudio/nerfstudio/models/base_model.py                             | 143  |
-| `get_outputs`                       | file:///D:/Masterthesis/nerfstudio/nerfstudio/models/nerfacto.py                               | 311  |
-| `forward`                           | file:///D:/Masterthesis/nerfstudio/nerfstudio/fields/base_field.py                             | 128  |
-| `get_density`                       | file:///D:/Masterthesis/nerfstudio/nerfstudio/fields/nerfacto_field.py                         | 211  |
+| `_bootstrap_inner`                  | file:///C:/Users/free3D/miniconda3/envs/nerfstudio/lib/threading.py                             | 932  |
+| `_bootstrap`                        | file:///C:/Users/free3D/miniconda3/envs/nerfstudio/lib/threading.py                             | 890  |
+| `run`                               | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/viewer/render_state_machine.py                   | 228  |
+| `render_img`                        | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/viewer/render_state_machine.py                   | 173  |
+| `decorate_context`                  | file:///C:/Users/free3D/miniconda3/envs/nerfstudio/lib/site-packages/torch/utils/_contextlib.py | 115  |
+| `get_outputs_for_camera`            | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/models/base_model.py                             | 173  |
+| `decorate_context`                  | file:///C:/Users/free3D/miniconda3/envs/nerfstudio/lib/site-packages/torch/utils/_contextlib.py | 115  |
+| `get_outputs_for_camera_ray_bundle` | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/models/base_model.py                             | 195  |
+| `forward`                           | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/models/base_model.py                             | 143  |
+| `get_outputs`                       | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/models/nerfacto.py                               | 311  |
+| `forward`                           | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/fields/base_field.py                             | 128  |
+| `get_density`                       | file:///C:/Users/free3D/Desktop/Patrick_Kaserer/nerfstudio/nerfstudio/fields/nerfacto_field.py                         | 211  |
  
 
 ## render_state_machine.run()

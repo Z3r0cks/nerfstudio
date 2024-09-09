@@ -116,14 +116,6 @@ class CacheDataloader(DataLoader):
             for res in track(results, description="Loading data batch", transient=True):
                 batch_list.append(res.result())
 
-                
-        # import pickle
-
-        # with open('D:/Masterthesis/debugging/dataparser/batch_list.pkl', 'rb') as f:
-        #     batch_list = pickle.load(f)
-        # else:le
-            # with open('D:/Masterthesis/debugging/dataparser/dataparser_outputs_test.pkl', 'rb') as f:
-            #     dataparser_outputs = pickle.load(f)
         return batch_list
 
     def _get_collated_batch(self):

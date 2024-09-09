@@ -30,7 +30,7 @@ from nerfstudio.engine.trainer import TrainerConfig
 from nerfstudio.pipelines.base_pipeline import Pipeline
 # from nerfstudio.utils import writer
 from nerfstudio.utils.eval_utils import eval_setup
-from nerfstudio.viewer.viewer_density import ViewerDensity as ViewerState
+from nerfstudio.viewer.viewer_density import Viewer_density as ViewerState
 from nerfstudio.utils.debugging import Debugging
 
 @dataclass

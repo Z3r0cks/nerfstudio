@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" This file contains the render state machine, which is responsible for deciding when to render the image """
+"""This file contains the render state machine, which is responsible for deciding when to render the image"""
+
 from __future__ import annotations
 
 import contextlib
@@ -36,7 +37,6 @@ from nerfstudio.viewer_legacy.server import viewer_utils
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
-    from nerfstudio.viewer.viewer_density import ViewerDensity
 
 RenderStates = Literal["low_move", "low_static", "high"]
 RenderActions = Literal["rerender", "move", "static", "step"]
@@ -60,7 +60,7 @@ class RenderStateMachine(threading.Thread):
         viewer: the viewer state
     """
 
-    def __init__(self, viewer: Viewer | ViewerDensity, viser_scale_ratio: float, client: ClientHandle):
+    def __init__(self, viewer: Viewer, viser_scale_ratio: float, client: ClientHandle):
         threading.Thread.__init__(self)
         self.transitions: Dict[RenderStates, Dict[RenderActions, RenderStates]] = {
             s: {} for s in get_args(RenderStates)
@@ -135,7 +135,7 @@ class RenderStateMachine(threading.Thread):
         if not self.viewer.render_tab_state.preview_render and self.viewer.include_time:
             camera_state.time = self.viewer.control_panel.time
         camera = get_camera(camera_state, image_height, image_width)
-        camera = camera.to(self.viewer.get_model().device) # cuda:0
+        camera = camera.to(self.viewer.get_model().device)
         assert isinstance(camera, Cameras)
         assert camera is not None, "render called before viewer connected"
 
@@ -180,7 +180,9 @@ class RenderStateMachine(threading.Thread):
 
                     desired_depth_pixels = {"low_move": 128, "low_static": 128, "high": 512}[self.state] ** 2
                     current_depth_pixels = outputs["depth"].shape[0] * outputs["depth"].shape[1]
-                    scale = min(desired_depth_pixels / current_depth_pixels, 1.0)
+
+                    # from the panel of ns-viewer, it is possible for user to enter zero resolution
+                    scale = min(desired_depth_pixels / max(1, current_depth_pixels), 1.0)
 
                     outputs["gl_z_buf_depth"] = F.interpolate(
                         outputs["depth"].squeeze(dim=-1)[None, None, ...],
@@ -301,7 +303,7 @@ class RenderStateMachine(threading.Thread):
             if self.viewer.render_tab_state.preview_render
             else 40
         )
-        self.client.set_background_image(
+        self.client.scene.set_background_image(
             selected_output,
             format=self.viewer.config.image_format,
             jpeg_quality=jpg_quality,

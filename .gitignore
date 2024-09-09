@@ -109,7 +109,6 @@ ipython_config.py
 #   in version control.
 #   https://pdm.fming.dev/#use-with-ide
 .pdm.toml
-nerfstudio/utils/deb_config_path.py
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
 __pypackages__/
@@ -189,3 +188,6 @@ camera_paths/
 */**/.DS_Store
 */**/._.DS_Store
 
+# pixi environments
+.pixi
+/third_party

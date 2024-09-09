@@ -64,7 +64,8 @@ class Field(nn.Module):
                 pixel_area=torch.ones_like(positions[..., :1]),
             )
         )
-        density, _, = self.get_density(ray_samples)
+        density, _= self.get_density(ray_samples) # type: ignore
+        
         return density
 
     @abstractmethod
@@ -76,10 +77,6 @@ class Field(nn.Module):
         Args:
             ray_samples: Samples locations to compute density.
         """
-        
-    def get_sample_locations(self):
-        """ Get locations from samples."""
-        return self._sample_locations
 
     def get_normals(self) -> Float[Tensor, "*batch 3"]:
         """Computes and returns a tensor of normals.
@@ -115,7 +112,7 @@ class Field(nn.Module):
             density_embedding: Density embeddings to condition on.
         """
 
-    def forward(self, ray_samples: RaySamples, compute_normals: bool = False):
+    def forward(self, ray_samples: RaySamples, compute_normals: bool = False) -> Tuple[Dict[FieldHeadNames, Tensor], Tensor]:
         """Evaluates the field at points along the ray.
 
         Args:
@@ -129,7 +126,7 @@ class Field(nn.Module):
 
         field_outputs = self.get_outputs(ray_samples, density_embedding=density_embedding)
         field_outputs[FieldHeadNames.DENSITY] = density  # type: ignore
-        
+
         if compute_normals:
             with torch.enable_grad():
                 normals = self.get_normals()

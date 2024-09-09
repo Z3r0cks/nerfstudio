@@ -49,7 +49,7 @@ VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
 
 @decorate_all([check_main_thread])
-class ViewerDensity:
+class Viewer_density:
     """Class to hold state for viewer variables
 
     Args:
@@ -150,7 +150,7 @@ class ViewerDensity:
             href="https://docs.nerf.studio/",
         )
         titlebar_theme = viser.theme.TitlebarConfig(buttons=buttons, image=image)
-        self.viser_server.configure_theme(
+        self.viser_server.gui.configure_theme(
             titlebar_content=titlebar_theme,
             control_layout="collapsible",
             dark_mode=True,
@@ -162,9 +162,9 @@ class ViewerDensity:
         self.viser_server.on_client_connect(self.handle_new_client)
 
         mkdown = self.make_stats_markdown(0, "0x0px")
-        self.stats_markdown = self.viser_server.add_gui_markdown(mkdown)
+        self.stats_markdown = self.viser_server.gui.add_markdown(mkdown)
         
-        tabs = self.viser_server.add_gui_tab_group()
+        tabs = self.viser_server.gui.add_tab_group()
         control_tab = tabs.add_tab("Control", viser.Icon.SETTINGS)
         with control_tab:
             self.control_panel = ControlPanel(
@@ -193,7 +193,7 @@ class ViewerDensity:
             else:
                 folder_path = "/".join(prev_labels + [folder_labels[0]])
                 if folder_path not in viewer_gui_folders:
-                    viewer_gui_folders[folder_path] = self.viser_server.add_gui_folder(folder_labels[0])
+                    viewer_gui_folders[folder_path] = self.viser_server.gui.add_folder(folder_labels[0])
                 with viewer_gui_folders[folder_path]:
                     nested_folder_install(folder_labels[1:], prev_labels + [folder_labels[0]], element)
 
@@ -223,7 +223,7 @@ class ViewerDensity:
         # Diagnostics for Gaussian Splatting: where the points are at the start of training.
         # This is hidden by default, it can be shown from the Viser UI's scene tree table.
         if isinstance(pipeline.model, SplatfactoModel):
-            self.viser_server.add_point_cloud(
+            self.viser_server.scene.add_point_cloud(
                 "/gaussian_splatting_initial_points",
                 points=pipeline.model.means.numpy(force=True) * VISER_NERFSTUDIO_SCALE_RATIO,
                 colors=(255, 0, 0),

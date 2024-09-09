@@ -15,6 +15,7 @@
 """
 Camera Models
 """
+
 import base64
 import math
 from dataclasses import dataclass
@@ -33,8 +34,6 @@ from nerfstudio.cameras import camera_utils
 from nerfstudio.cameras.rays import RayBundle
 from nerfstudio.data.scene_box import OrientedBox, SceneBox
 from nerfstudio.utils.tensor_dataclass import TensorDataclass
-#---------------------------------------------------------
-from nerfstudio.utils.debugging import Debugging
 
 TORCH_DEVICE = Union[torch.device, str]
 
@@ -174,7 +173,7 @@ class Cameras(TensorDataclass):
             name: The name of the variable. Used for error messages
         """
         if isinstance(fc_xy, float):
-            fc_xy = torch.Tensor([fc_xy], device=self.device)
+            fc_xy = torch.tensor([fc_xy], device=self.device)
         elif isinstance(fc_xy, torch.Tensor):
             if fc_xy.ndim == 0 or fc_xy.shape[-1] != 1:
                 fc_xy = fc_xy.unsqueeze(-1)
@@ -379,8 +378,7 @@ class Cameras(TensorDataclass):
 
         Returns:
             Rays for the given camera indices and coords.
-        """ 
-        
+        """
         # Check the argument types to make sure they're valid and all shaped correctly
         assert isinstance(camera_indices, (torch.Tensor, int)), "camera_indices must be a tensor or int"
         assert coords is None or isinstance(coords, torch.Tensor), "coords must be a tensor or None"
@@ -401,6 +399,7 @@ class Cameras(TensorDataclass):
             ), "Can only index into single camera with no batch dimensions if index is zero"
         else:
             cameras = self
+
         # If the camera indices are an int, then we need to make sure that the camera batch is 1D
         if isinstance(camera_indices, int):
             assert (
@@ -474,7 +473,7 @@ class Cameras(TensorDataclass):
         # If we have mandated that we don't keep the shape, then we flatten
         if keep_shape is False:
             raybundle = raybundle.flatten()
-            
+
         if aabb_box is not None or obb_box is not None:
             with torch.no_grad():
                 rays_o = raybundle.origins.contiguous()
@@ -622,19 +621,15 @@ class Cameras(TensorDataclass):
 
         # Get our image coordinates and image coordinates offset by 1 (offsets used for dx, dy calculations)
         # Also make sure the shapes are correct
-        
-        # fx, fy, cx, cy = list from camera parameters * num_rays
-        
         coord = torch.stack([(x - cx) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_x_offset = torch.stack([(x - cx + 1) / fx, (y - cy) / fy], -1)  # (num_rays, 2)
         coord_y_offset = torch.stack([(x - cx) / fx, (y - cy + 1) / fy], -1)  # (num_rays, 2)
-        
         assert (
             coord.shape == num_rays_shape + (2,)
             and coord_x_offset.shape == num_rays_shape + (2,)
             and coord_y_offset.shape == num_rays_shape + (2,)
         )
-        
+
         # Stack image coordinates and image coordinates offset by 1, check shapes too
         coord_stack = torch.stack([coord, coord_x_offset, coord_y_offset], dim=0)  # (3, num_rays, 2)
         assert coord_stack.shape == (3,) + num_rays_shape + (2,)
@@ -658,11 +653,10 @@ class Cameras(TensorDataclass):
                         coord_stack[coord_mask, :].reshape(3, -1, 2),
                         distortion_params[mask, :],
                     ).reshape(-1, 2)
-                    
-        # Switch from OpenCV to OpenGL
 
+        # Switch from OpenCV to OpenGL
         coord_stack[..., 1] *= -1
-        
+
         # Make sure after we have undistorted our images, the shapes are still correct
         assert coord_stack.shape == (3,) + num_rays_shape + (2,)
 
@@ -673,7 +667,7 @@ class Cameras(TensorDataclass):
         # directions_stack[2] is the direction for ray in camera coordinates offset by 1 in y
         cam_types = torch.unique(self.camera_type, sorted=False)
         directions_stack = torch.empty((3,) + num_rays_shape + (3,), device=self.device)
-        
+
         c2w = self.camera_to_worlds[true_indices]
         assert c2w.shape == num_rays_shape + (3, 4)
 
@@ -688,7 +682,6 @@ class Cameras(TensorDataclass):
             Returns:
                 A tuple containing the origins and the directions of the rays.
             """
-            
             # Directions calculated similarly to equirectangular
             ods_cam_type = (
                 CameraType.OMNIDIRECTIONALSTEREO_R.value if eye == "right" else CameraType.OMNIDIRECTIONALSTEREO_L.value
@@ -701,7 +694,7 @@ class Cameras(TensorDataclass):
             directions_stack[..., 0][mask] = torch.masked_select(-torch.sin(theta) * torch.sin(phi), mask).float()
             directions_stack[..., 1][mask] = torch.masked_select(torch.cos(phi), mask).float()
             directions_stack[..., 2][mask] = torch.masked_select(-torch.cos(theta) * torch.sin(phi), mask).float()
-            
+
             vr_ipd = 0.064  # IPD in meters (note: scale of NeRF must be true to life and can be adjusted with the Blender add-on)
             isRightEye = 1 if eye == "right" else -1
 
@@ -746,7 +739,6 @@ class Cameras(TensorDataclass):
             Returns:
                 A tuple containing the origins and the directions of the rays.
             """
-            
             # Directions calculated similarly to equirectangular
             vr180_cam_type = CameraType.VR180_R.value if eye == "right" else CameraType.VR180_L.value
             mask = (self.camera_type[true_indices] == vr180_cam_type).squeeze(-1)
@@ -787,7 +779,7 @@ class Cameras(TensorDataclass):
             c2w[..., :3, 3] = vr180_origins
 
             return vr180_origins, directions_stack
-        
+
         for cam in cam_types:
             if CameraType.PERSPECTIVE.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.PERSPECTIVE.value).squeeze(-1)  # (num_rays)
@@ -813,34 +805,10 @@ class Cameras(TensorDataclass):
                 ).float()
                 directions_stack[..., 2][mask] = -torch.masked_select(torch.cos(theta), mask).float()
 
-            elif CameraType.LIDAR.value in cam_types:
-                width = int(self.width[true_indices][0, 0, 0].item())
-                height = int(self.height[true_indices][0, 0, 0].item())
-                
-                fov_x = 2 * torch.atan(width / (2 * fx))
-                fov_y = 2 * torch.atan(height / (2 * fy))
-                
-                if fov_x[0, 0] < 0:
-                    fov_x = 2 * math.pi + fov_x
-
-                if fov_y[0, 0] < 0:
-                    fov_y = 2 * math.pi + fov_y
-                
-                theta = torch.linspace(-fov_x[0, 0].item() / 2, fov_x[0, 0].item() / 2, steps=width, device='cuda:0')  # horizontaler FOV
-                phi = torch.linspace(-fov_y[0, 0].item() / 2, fov_y[0, 0].item() / 2, steps=height, device='cuda:0')  # vertikaler FOv
-
-                theta, phi = torch.meshgrid(theta, phi, indexing='xy')
-                
-                directions_stack = torch.zeros((3, height, width, 3), device='cuda:0')
-                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x-Komponente
-                directions_stack[0, :, :, 1] = torch.sin(phi)  # y-Komponente
-                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z-Komponente
-                
-                directions_stack = -directions_stack      
-                                
             elif CameraType.EQUIRECTANGULAR.value in cam_types:
                 mask = (self.camera_type[true_indices] == CameraType.EQUIRECTANGULAR.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
+
                 # For equirect, fx = fy = height = width/2
                 # Then coord[..., 0] goes from -1 to 1 and coord[..., 1] goes from -1/2 to 1/2
                 theta = -torch.pi * coord_stack[..., 0]  # minus sign for right-handed
@@ -912,6 +880,31 @@ class Cameras(TensorDataclass):
                     dim=1,
                 )
                 directions_stack[coord_mask] = camera_utils.fisheye624_unproject(masked_coords, camera_params)
+            
+            elif CameraType.LIDAR.value in cam_types:
+                width = int(self.width[true_indices][0, 0, 0].item())
+                height = int(self.height[true_indices][0, 0, 0].item())
+                
+                fov_x = 2 * torch.atan(width / (2 * fx))
+                fov_y = 2 * torch.atan(height / (2 * fy))
+                
+                if fov_x[0, 0] < 0:
+                    fov_x = 2 * math.pi + fov_x
+
+                if fov_y[0, 0] < 0:
+                    fov_y = 2 * math.pi + fov_y
+                
+                theta = torch.linspace(-fov_x[0, 0].item() / 2, fov_x[0, 0].item() / 2, steps=width, device='cuda:0')  # horizontaler FOV
+                phi = torch.linspace(-fov_y[0, 0].item() / 2, fov_y[0, 0].item() / 2, steps=height, device='cuda:0')  # vertikaler FOv
+
+                theta, phi = torch.meshgrid(theta, phi, indexing='xy')
+                
+                directions_stack = torch.zeros((3, height, width, 3), device='cuda:0')
+                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x-Komponente
+                directions_stack[0, :, :, 1] = torch.sin(phi)  # y-Komponente
+                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z-Komponente
+                
+                directions_stack = -directions_stack  
 
             else:
                 raise ValueError(f"Camera type {cam} not supported.")
@@ -925,15 +918,16 @@ class Cameras(TensorDataclass):
         
         if CameraType.LIDAR.value in cam_types:
             rotation = rotation.to(device='cuda:0')
-            
+
         directions_stack = torch.sum(
             directions_stack[..., None, :] * rotation, dim=-1
         )  # (..., 1, 3) * (..., 3, 3) -> (..., 3)
         directions_stack, directions_norm = camera_utils.normalize_with_norm(directions_stack, -1)
         assert directions_stack.shape == (3,) + num_rays_shape + (3,)
+
         origins = c2w[..., :3, 3]  # (..., 3)
         assert origins.shape == num_rays_shape + (3,)
-        
+
         directions = directions_stack[0]
         assert directions.shape == num_rays_shape + (3,)
 
@@ -954,7 +948,7 @@ class Cameras(TensorDataclass):
             metadata["directions_norm"] = directions_norm[0].detach()
         else:
             metadata = {"directions_norm": directions_norm[0].detach()}
-        
+
         return RayBundle(
             origins=origins,
             directions=directions,
@@ -1021,12 +1015,15 @@ class Cameras(TensorDataclass):
         return K
 
     def rescale_output_resolution(
-        self, scaling_factor: Union[Shaped[Tensor, "*num_cameras"], Shaped[Tensor, "*num_cameras 1"], float, int]
+        self,
+        scaling_factor: Union[Shaped[Tensor, "*num_cameras"], Shaped[Tensor, "*num_cameras 1"], float, int],
+        scale_rounding_mode: str = "floor",
     ) -> None:
         """Rescale the output resolution of the cameras.
 
         Args:
             scaling_factor: Scaling factor to apply to the output resolution.
+            scale_rounding_mode: round down or round up when calculating the scaled image height and width
         """
         if isinstance(scaling_factor, (float, int)):
             scaling_factor = torch.tensor([scaling_factor]).to(self.device).broadcast_to((self.cx.shape))
@@ -1043,5 +1040,14 @@ class Cameras(TensorDataclass):
         self.fy = self.fy * scaling_factor
         self.cx = self.cx * scaling_factor
         self.cy = self.cy * scaling_factor
-        self.height = (self.height * scaling_factor).to(torch.int64)
-        self.width = (self.width * scaling_factor).to(torch.int64)
+        if scale_rounding_mode == "floor":
+            self.height = (self.height * scaling_factor).to(torch.int64)
+            self.width = (self.width * scaling_factor).to(torch.int64)
+        elif scale_rounding_mode == "round":
+            self.height = torch.floor(0.5 + (self.height * scaling_factor)).to(torch.int64)
+            self.width = torch.floor(0.5 + (self.width * scaling_factor)).to(torch.int64)
+        elif scale_rounding_mode == "ceil":
+            self.height = torch.ceil(self.height * scaling_factor).to(torch.int64)
+            self.width = torch.ceil(self.width * scaling_factor).to(torch.int64)
+        else:
+            raise ValueError("Scale rounding mode must be 'floor', 'round' or 'ceil'.")

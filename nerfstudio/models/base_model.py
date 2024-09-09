@@ -35,6 +35,7 @@ from nerfstudio.data.scene_box import OrientedBox, SceneBox
 from nerfstudio.engine.callbacks import TrainingCallback, TrainingCallbackAttributes
 from nerfstudio.model_components.scene_colliders import NearFarCollider
 
+
 # Model related configs
 @dataclass
 class ModelConfig(InstantiateConfig):
@@ -160,7 +161,7 @@ class Model(nn.Module):
             batch: ground truth batch corresponding to outputs
             metrics_dict: dictionary of metrics, some of which we can use for loss
         """
-    
+
     @torch.no_grad()
     def get_outputs_for_camera(self, camera: Cameras, obb_box: Optional[OrientedBox] = None, **kwargs) -> Dict[str, torch.Tensor]:
         """Takes in a camera, generates the raybundle, and computes the output of the model.
@@ -168,8 +169,7 @@ class Model(nn.Module):
 
         Args:
             camera: generates raybundle
-        """ 
-        
+        """
         
         if (kwargs.get("pixel_area") is None):
             return self.get_outputs_for_camera_ray_bundle(
@@ -182,7 +182,7 @@ class Model(nn.Module):
             pixel_area = torch.full(shape, int(kwargs.get("pixel_area") or 1), dtype=torch.float32)
             ray.pixel_area = pixel_area
             return self.get_outputs_for_camera_ray_bundle(ray)
-        
+
     @torch.no_grad()
     def get_outputs_for_camera_ray_bundle(self, camera_ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:
         """Takes in camera parameters and computes the output of the model.
@@ -202,8 +202,6 @@ class Model(nn.Module):
             # move the chunk inputs to the model device
             ray_bundle = ray_bundle.to(self.device)
             outputs = self.forward(ray_bundle=ray_bundle)
-            densities_locations = outputs["densities_locations"]
-            densities = outputs["densities"]
             for output_name, output in outputs.items():  # type: ignore
                 if not isinstance(output, torch.Tensor):
                     # TODO: handle lists of tensors as well
@@ -213,9 +211,9 @@ class Model(nn.Module):
         outputs = {}
         for output_name, outputs_list in outputs_lists.items():
             outputs[output_name] = torch.cat(outputs_list).view(image_height, image_width, -1)  # type: ignore
+            
         outputs["densities_locations"] = outputs_lists["densities_locations"]
         outputs["densities"] = outputs_lists["densities"]
-
         return outputs
 
     def get_rgba_image(self, outputs: Dict[str, torch.Tensor], output_name: str = "rgb") -> torch.Tensor:
@@ -250,7 +248,7 @@ class Model(nn.Module):
         TODO: This shouldn't return a loss
 
         Args:
-            image_idx: Index of the image. 
+            image_idx: Index of the image.
             step: Current step.
             batch: Batch of data.
             outputs: Outputs of the model.

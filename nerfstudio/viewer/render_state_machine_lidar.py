@@ -42,7 +42,7 @@ VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
-    from nerfstudio.viewer.viewer_density import ViewerDensity
+    from nerfstudio.viewer.viewer_density import Viewer_density
 
 RenderStates = Literal["low_move", "low_static", "high"]
 RenderActions = Literal["rerender", "move", "static", "step"]
@@ -65,7 +65,7 @@ class RenderStateMachine(threading.Thread):
         viewer: the viewer state
     """
 
-    def __init__(self, viewer: ViewerDensity, viser_scale_ratio: float, client: ClientHandle):
+    def __init__(self, viewer: Viewer_density, viser_scale_ratio: float, client: ClientHandle):
         threading.Thread.__init__(self)
         self.transitions: Dict[RenderStates, Dict[RenderActions, RenderStates]] = {
             s: {} for s in get_args(RenderStates)
@@ -104,7 +104,7 @@ class RenderStateMachine(threading.Thread):
         self.height = 10
         self.mesh_objs = []
         self.mesaurement_conversion = None
-        self.gui_button = self.viewer.viser_server.add_gui_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
+        self.gui_button = self.viewer.viser_server.gui.add_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
         self.dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
         
         try:
@@ -268,73 +268,73 @@ class RenderStateMachine(threading.Thread):
         
         viser = self.viewer.viser_server        
         #TODO: explain path in documentation
-        self.perspectiv = viser.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(self.x_omni, self.y_omni, self.z_omni))
+        self.perspectiv = viser.scene.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(self.x_omni, self.y_omni, self.z_omni))
         
-        with viser.add_gui_folder("Calibration"):
-            viser.add_gui_button("Measure Point 1", color="blue").on_click(lambda _: self._show_density(measure=[True, 0]))
-            viser.add_gui_button("Measure Point 2", color="blue").on_click(lambda _: self._show_density(measure=[True, 1]))
-            self.m_point_1 = viser.add_gui_text("Coord Measurement Point 1", "Not Set")
-            self.m_point_2 = viser.add_gui_text("Coord Measurement Point 2", "Not Set")
-            viser.add_gui_text("Conversion", "Not Set")
+        with viser.gui.add_folder("Calibration"):
+            viser.gui.add_button("Measure Point 1", color="blue").on_click(lambda _: self._show_density(measure=[True, 0]))
+            viser.gui.add_button("Measure Point 2", color="blue").on_click(lambda _: self._show_density(measure=[True, 1]))
+            self.m_point_1 = viser.gui.add_text("Coord Measurement Point 1", "Not Set")
+            self.m_point_2 = viser.gui.add_text("Coord Measurement Point 2", "Not Set")
+            viser.gui.add_text("Conversion", "Not Set")
             
-            with viser.add_gui_folder("Correction", expand_by_default=False):
-                viser.add_gui_button("Delete Point 1", color="red").on_click(lambda _: self.delete_measurement_point(1))
-                viser.add_gui_button("Delete Point 2", color="red").on_click(lambda _: self.delete_measurement_point(2))
-                viser.add_gui_button("Delete Conversion", color="red").on_click(lambda _: self.delete_measurement_point(3))
+            with viser.gui.add_folder("Correction", expand_by_default=False):
+                viser.gui.add_button("Delete Point 1", color="red").on_click(lambda _: self.delete_measurement_point(1))
+                viser.gui.add_button("Delete Point 2", color="red").on_click(lambda _: self.delete_measurement_point(2))
+                viser.gui.add_button("Delete Conversion", color="red").on_click(lambda _: self.delete_measurement_point(3))
                 
-        with viser.add_gui_folder("Perspectiv Position"):
-            self.perspectiv_pos_x = viser.add_gui_slider("Pos X", -20, 20, 0.01, 0)
-            self.perspectiv_pos_y = viser.add_gui_slider("Pos Y", -20, 20, 0.01, 0)
-            self.perspectiv_pos_z = viser.add_gui_slider("Pos Z (Height)", -20, 20, 0.01, 0)
+        with viser.gui.add_folder("Perspectiv Position"):
+            self.perspectiv_pos_x = viser.gui.add_slider("Pos X", -20, 20, 0.01, 0)
+            self.perspectiv_pos_y = viser.gui.add_slider("Pos Y", -20, 20, 0.01, 0)
+            self.perspectiv_pos_z = viser.gui.add_slider("Pos Z (Height)", -20, 20, 0.01, 0)
         
-        with viser.add_gui_folder("Perspectiv Orientation"):
-            self.perspectiv_wxyz_x = viser.add_gui_slider("Rot X", -180, 180, 0.1, 0)
-            self.perspectiv_wxyz_y = viser.add_gui_slider("Rot Y", -180, 180, 0.1, 0)
-            self.perspectiv_wxyz_z = viser.add_gui_slider("Rot Z", -180, 180, 0.1, 0)
+        with viser.gui.add_folder("Perspectiv Orientation"):
+            self.perspectiv_wxyz_x = viser.gui.add_slider("Rot X", -180, 180, 0.1, 0)
+            self.perspectiv_wxyz_y = viser.gui.add_slider("Rot Y", -180, 180, 0.1, 0)
+            self.perspectiv_wxyz_z = viser.gui.add_slider("Rot Z", -180, 180, 0.1, 0)
         
         with open('../nerfstudio/lidar_settings.json') as f:
             lidar_data = json.load(f)
             
-        self.h_angle_resolution_dropdown = viser.add_gui_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
-        self.v_angle_resolution_dropdown = viser.add_gui_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+        self.h_angle_resolution_dropdown = viser.gui.add_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+        self.v_angle_resolution_dropdown = viser.gui.add_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
         
         for lidar in lidar_data:
             scanner_settings = lidar_data[lidar]
-            with viser.add_gui_folder(lidar_data[lidar]["name"], expand_by_default=False):
-                viser.add_gui_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
-                viser.add_gui_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
-                viser.add_gui_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
-                viser.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
+            with viser.gui.add_folder(lidar_data[lidar]["name"], expand_by_default=False):
+                viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
+                viser.gui.add_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
+                viser.gui.add_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
+                viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
 
-        with viser.add_gui_folder("Dev Options", expand_by_default=False):
-            with viser.add_gui_folder("Camera Options", expand_by_default=False):
-                viser.add_gui_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
-                viser.add_gui_button("Perspectiv To Viser Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
+        with viser.gui.add_folder("Dev Options", expand_by_default=False):
+            with viser.gui.add_folder("Camera Options", expand_by_default=False):
+                viser.gui.add_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
+                viser.gui.add_button("Perspectiv To Viser Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
                 
-            with viser.add_gui_folder("Debugging", expand_by_default=False):
-                viser.add_gui_button("Show all samples per ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
-                viser.add_gui_button("Print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
-                viser.add_gui_button("Print single ray inf.", color="red").on_click(lambda _: self._scan_density())
-                viser.add_gui_button("Take screenshot", color="green").on_click(lambda _: self.take_screenshot())
+            with viser.gui.add_folder("Debugging", expand_by_default=False):
+                viser.gui.add_button("Show all samples per ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
+                viser.gui.add_button("Print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
+                viser.gui.add_button("Print single ray inf.", color="red").on_click(lambda _: self._scan_density())
+                viser.gui.add_button("Take screenshot", color="green").on_click(lambda _: self.take_screenshot())
                 
-            with viser.add_gui_folder("Density Options"):
-                viser.add_gui_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
-                viser.add_gui_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
-                viser.add_gui_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(plot_density=True))
-                viser.add_gui_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
-                viser.add_gui_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
+            with viser.gui.add_folder("Density Options"):
+                viser.gui.add_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
+                viser.gui.add_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
+                viser.gui.add_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(plot_density=True))
+                viser.gui.add_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
+                viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
                 
-            with viser.add_gui_folder("Density Settings"):
-                with viser.add_gui_folder("Width (X)"):
-                    self.perspectiv_fov_x = viser.add_gui_slider("FOV Horizontal", 0, 360, 1, 30)
-                    self.perspectiv_width = viser.add_gui_slider("Angular Resolution X", 1, 5000, 1, 2)
-                with viser.add_gui_folder("Height (Y)"):
-                    self.perspectiv_fov_y = viser.add_gui_slider("FOV Vertical", 0, 360, 1, 30)
-                    self.perspectiv_heigth = viser.add_gui_slider("Angular Resolution Y", 1, 5000, 1, 1)
+            with viser.gui.add_folder("Density Settings"):
+                with viser.gui.add_folder("Width (X)"):
+                    self.perspectiv_fov_x = viser.gui.add_slider("FOV Horizontal", 0, 360, 1, self.fov_x)
+                    self.perspectiv_width = viser.gui.add_slider("Angular Resolution X", 1, 500, 1, self.width)
+                with viser.gui.add_folder("Height (Y)"):
+                    self.perspectiv_fov_y = viser.gui.add_slider("FOV Vertical", 0, 360, 1, self.fov_y)
+                    self.perspectiv_heigth = viser.gui.add_slider("Angular Resolution Y", 1, 500, 1, self.height)
                 
-            with viser.add_gui_folder("ID Settings", expand_by_default=False):
-                self.ray_id_slider = viser.add_gui_slider("Ray ID", 0, 10000, 1, 0)
-                self.side_id_slider = viser.add_gui_slider("Side ID", 0, 10000, 1, 0)
+            with viser.gui.add_folder("ID Settings", expand_by_default=False):
+                self.ray_id_slider = viser.gui.add_slider("Ray ID", 0, 10000, 1, 0)
+                self.side_id_slider = viser.gui.add_slider("Side ID", 0, 10000, 1, 0)
                 
             self.perspectiv_pos_x.on_update(lambda _: self.update_cube())
             self.perspectiv_pos_y.on_update(lambda _: self.update_cube())
@@ -637,7 +637,7 @@ class RenderStateMachine(threading.Thread):
             
             Debugging.log("filtered_locations", filtered_locations.shape)
             # Debugging.log("filtered_locations", filtered_locations)
-            obj = self.viewer.viser_server.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.01, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
+            obj = self.viewer.viser_server.scene.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.01, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
             self.mesh_objs.append(obj)
         
         if clickable != None or measure[0] != False:
@@ -714,7 +714,7 @@ class RenderStateMachine(threading.Thread):
         ])
         
         mesh_name = f"location_{index}"
-        obj = self.viewer.viser_server.add_mesh_simple(
+        obj = self.viewer.viser_server.scene.add_mesh_simple(
             name=mesh_name,
             vertices=vertices,
             faces=faces,
@@ -758,11 +758,11 @@ class RenderStateMachine(threading.Thread):
             (x1, y1, z1),(x2, y2, z2) = self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[0]
             # x2, y2, z2 = self.mesaurement_point_coordinates[1]
             distance = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
-            distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {distance:.4f}", (1, 0, 0, 0), ((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2))
+            distance_label = self.viewer.viser_server.scene.add_label("distance_label", f"Distance: {distance:.4f}", (1, 0, 0, 0), ((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2))
             
             vertices = np.array([self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1], self.mesaurement_point_coordinates[0]])
             faces = np.array([[0, 1, 2]])
-            distance_ray = self.viewer.viser_server.add_mesh_simple(
+            distance_ray = self.viewer.viser_server.scene.add_mesh_simple(
                 name="line_mesh",
                 vertices=vertices,
                 faces=faces,
@@ -806,15 +806,15 @@ class RenderStateMachine(threading.Thread):
         global global_density
         global_distance = self.compute_distance(self.perspectiv.position, point)
         global_density = density
-        distance_label = self.viewer.viser_server.add_label("distance_label", f"Distance: {global_distance:.4f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
+        distance_label = self.viewer.viser_server.scene.add_label("distance_label", f"Distance: {global_distance:.4f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
         # destity_label = self.viewer.viser_server.add_label("density_label", f"Density: {density:.5f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.08))
         
         # distance_label.label_size = 0.1
-        # distance_ray = self.viewer.viser_server.add_gui_modal("Distance")
+        # distance_ray = self.viewer.viser_server.add_modal("Distance")
         point3 = self.perspectiv.position + (point - self.perspectiv.position) * 0.001
         vertices = np.array([self.perspectiv.position, point, point3])
         faces = np.array([[0, 1, 2]])
-        distance_ray = self.viewer.viser_server.add_mesh_simple(
+        distance_ray = self.viewer.viser_server.scene.add_mesh_simple(
             name="line_mesh",
             vertices=vertices,
             faces=faces,
@@ -836,12 +836,12 @@ class RenderStateMachine(threading.Thread):
         distance_ray.on_click(lambda _: distance_ray.remove())
 
         # with modal:
-        #     self.viewer.viser_server.add_gui_markdown(f"Distance: {distance:.2f} m")
+        #     self.viewer.viser_server.add_markdown(f"Distance: {distance:.2f} m")
         #     # frame_origin = self.viewer.viser_server.add_frame("origin_frame", True, position=self.box.position, axes_length=0.3, axes_radius=0.01)
         #     # frame_target = self.viewer.viser_server.add_frame("frame_target", True, position=point, axes_length=0.3, axes_radius=0.01)
         #     # frame_origin.on_click(lambda _: frame_origin.remove())
         #     # frame_target.on_click(lambda _: frame_target.remove())
-        #     self.viewer.viser_server.add_gui_button("Close").on_click(lambda _: modal.close())
+        #     self.viewer.viser_server.add_button("Close").on_click(lambda _: modal.close())
     
     def toggle_labels(self):
         for obj in self.mesh_objs:
@@ -973,7 +973,7 @@ class RenderStateMachine(threading.Thread):
             if static_render
             else 75 if self.viewer.render_tab_state.preview_render else 40
         )
-        self.client.set_background_image(
+        self.client.scene.set_background_image(
             selected_output,
             format=self.viewer.config.image_format,
             jpeg_quality=jpg_quality,

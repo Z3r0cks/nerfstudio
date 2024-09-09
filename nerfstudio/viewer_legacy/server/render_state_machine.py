@@ -1,4 +1,4 @@
- # Copyright 2022 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
+# Copyright 2022 the Regents of the University of California, Nerfstudio Team and contributors. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" This file contains the render state machine, which is responsible for deciding when to render the image """
+"""This file contains the render state machine, which is responsible for deciding when to render the image"""
+
 from __future__ import annotations
 
 import contextlib

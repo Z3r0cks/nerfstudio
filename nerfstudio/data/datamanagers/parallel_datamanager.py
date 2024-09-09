@@ -15,6 +15,7 @@
 """
 Parallel data manager that generates training data in multiple python processes.
 """
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -93,10 +94,10 @@ class DataProcessor(mp.Process):  # type: ignore
         self.exclude_batch_keys_from_device = self.dataset.exclude_batch_keys_from_device
         self.pixel_sampler = pixel_sampler
         self.ray_generator = RayGenerator(self.dataset.cameras)
-        self.cache_images()
 
     def run(self):
         """Append out queue in parallel with ray bundles and batches."""
+        self.cache_images()
         while True:
             batch = self.pixel_sampler.sample(self.img_data)
             ray_indices = batch["indices"]
@@ -125,11 +126,6 @@ class DataProcessor(mp.Process):  # type: ignore
                 results.append(res)
             for res in track(results, description="Loading data batch", transient=False):
                 batch_list.append(res.result())
-        # import pickle
-        # # with open('D:/Masterthesis/debugging/dataparser/batch_list_datamanager.pkl', 'wb') as f:
-        # #     pickle.dump(batch_list, f)
-        # with open('D:/Masterthesis/debugging/dataparser/batch_list_datamanager.pkl', 'rb') as f:
-        #     batch_list = pickle.load(f)
         self.img_data = self.config.collate_fn(batch_list)
 
 

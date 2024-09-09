@@ -15,6 +15,7 @@
 """
 Helper for Lie group operations. Currently only used for pose optimization.
 """
+
 import torch
 from jaxtyping import Float
 from torch import Tensor
@@ -32,7 +33,6 @@ def exp_map_SO3xR3(tangent_vector: Float[Tensor, "b 6"]) -> Float[Tensor, "b 3 4
         [R|t] transformation matrices.
     """
     # code for SO3 map grabbed from pytorch3d and stripped down to bare-bones
-    print("tangent_vector", tangent_vector)
     log_rot = tangent_vector[:, 3:]
     nrms = (log_rot * log_rot).sum(1)
     rot_angles = torch.clamp(nrms, 1e-4).sqrt()

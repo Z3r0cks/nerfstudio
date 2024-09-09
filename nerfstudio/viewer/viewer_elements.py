@@ -13,8 +13,7 @@
 # limitations under the License.
 
 
-""" Viewer GUI elements for the nerfstudio viewer """
-
+"""Viewer GUI elements for the nerfstudio viewer"""
 
 from __future__ import annotations
 
@@ -42,7 +41,7 @@ from nerfstudio.viewer.utils import CameraState, get_camera
 
 if TYPE_CHECKING:
     from nerfstudio.viewer.viewer import Viewer
-    from nerfstudio.viewer.viewer_density import ViewerDensity
+    from nerfstudio.viewer.viewer_density import Viewer_density
 
 TValue = TypeVar("TValue")
 TString = TypeVar("TString", default=str, bound=str)
@@ -87,14 +86,14 @@ class ViewerControl:
     class for exposing non-gui controls of the viewer to the user
     """
 
-    def _setup(self, viewer: Viewer | ViewerDensity):
+    def _setup(self, viewer: Viewer | Viewer_density):
         """
         Internal use only, setup the viewer control with the viewer state object
 
         Args:
             viewer: The viewer object (viewer.py)
         """
-        self.viewer: Viewer | ViewerDensity = viewer
+        self.viewer: Viewer | Viewer_density = viewer
         self.viser_server: ViserServer = viewer.viser_server
 
     def set_pose(
@@ -173,8 +172,7 @@ class ViewerControl:
         event_type: Literal["click"],
         cb: Callable[[ViewerClick], None],
         removed_cb: Optional[Callable[[], None]] = None,
-    ):
-        ...
+    ): ...
 
     @overload
     def register_pointer_cb(
@@ -182,8 +180,7 @@ class ViewerControl:
         event_type: Literal["rect-select"],
         cb: Callable[[ViewerRectSelect], None],
         removed_cb: Optional[Callable[[], None]] = None,
-    ):
-        ...
+    ): ...
 
     def register_pointer_cb(
         self,
@@ -231,7 +228,7 @@ class ViewerControl:
         cb_overriden = False
         with warnings.catch_warnings(record=True) as w:
             # Register the callback with the viser server.
-            self.viser_server.on_scene_pointer(event_type=event_type)(wrapped_cb)
+            self.viser_server.scene.on_pointer_event(event_type=event_type)(wrapped_cb)
             # If there exists a warning, it's because a callback was overriden.
             cb_overriden = len(w) > 0
 
@@ -243,7 +240,7 @@ class ViewerControl:
 
         # If there exists a cleanup callback after the pointer event is done, register it.
         if removed_cb is not None:
-            self.viser_server.on_scene_pointer_removed(removed_cb)
+            self.viser_server.scene.on_pointer_callback_removed(removed_cb)
 
     def unregister_click_cb(self, cb: Optional[Callable] = None):
         """Deprecated, use unregister_pointer_cb instead. `cb` is ignored."""
@@ -261,7 +258,7 @@ class ViewerControl:
         Args:
             cb: The callback to remove
         """
-        self.viser_server.remove_scene_pointer_callback()
+        self.viser_server.scene.remove_pointer_callback()
 
     @property
     def server(self):
@@ -343,7 +340,7 @@ class ViewerButton(ViewerElement[bool]):
         super().__init__(name, disabled=disabled, visible=visible, cb_hook=cb_hook)
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
-        self.gui_handle = viser_server.add_gui_button(label=self.name, disabled=self.disabled, visible=self.visible)
+        self.gui_handle = viser_server.gui.add_button(label=self.name, disabled=self.disabled, visible=self.visible)
 
     def install(self, viser_server: ViserServer) -> None:
         self._create_gui_handle(viser_server)
@@ -389,8 +386,7 @@ class ViewerParameter(ViewerElement[TValue], Generic[TValue]):
         self.gui_handle.on_update(lambda _: self.cb_hook(self))
 
     @abstractmethod
-    def _create_gui_handle(self, viser_server: ViserServer) -> None:
-        ...
+    def _create_gui_handle(self, viser_server: ViserServer) -> None: ...
 
     @property
     def value(self) -> TValue:
@@ -446,7 +442,7 @@ class ViewerSlider(ViewerParameter[IntOrFloat], Generic[IntOrFloat]):
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
         assert self.gui_handle is None, "gui_handle should be initialized once"
-        self.gui_handle = viser_server.add_gui_slider(
+        self.gui_handle = viser_server.gui.add_slider(
             self.name,
             self.min,
             self.max,
@@ -485,7 +481,7 @@ class ViewerText(ViewerParameter[str]):
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
         assert self.gui_handle is None, "gui_handle should be initialized once"
-        self.gui_handle = viser_server.add_gui_text(
+        self.gui_handle = viser_server.gui.add_text(
             self.name, self.default_value, disabled=self.disabled, visible=self.visible, hint=self.hint
         )
 
@@ -519,7 +515,7 @@ class ViewerNumber(ViewerParameter[IntOrFloat], Generic[IntOrFloat]):
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
         assert self.gui_handle is None, "gui_handle should be initialized once"
-        self.gui_handle = viser_server.add_gui_number(
+        self.gui_handle = viser_server.gui.add_number(
             self.name, self.default_value, disabled=self.disabled, visible=self.visible, hint=self.hint
         )
 
@@ -551,7 +547,7 @@ class ViewerCheckbox(ViewerParameter[bool]):
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
         assert self.gui_handle is None, "gui_handle should be initialized once"
-        self.gui_handle = viser_server.add_gui_checkbox(
+        self.gui_handle = viser_server.gui.add_checkbox(
             self.name, self.default_value, disabled=self.disabled, visible=self.visible, hint=self.hint
         )
 
@@ -591,7 +587,7 @@ class ViewerDropdown(ViewerParameter[TString], Generic[TString]):
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
         assert self.gui_handle is None, "gui_handle should be initialized once"
-        self.gui_handle = viser_server.add_gui_dropdown(
+        self.gui_handle = viser_server.gui.add_dropdown(
             self.name,
             self.options,
             self.default_value,
@@ -637,7 +633,7 @@ class ViewerButtonGroup(ViewerParameter[TString], Generic[TString]):
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
         assert self.gui_handle is None, "gui_handle should be initialized once"
-        self.gui_handle = viser_server.add_gui_button_group(self.name, self.options, visible=self.visible)
+        self.gui_handle = viser_server.gui.add_button_group(self.name, self.options, visible=self.visible)
 
     def install(self, viser_server: ViserServer) -> None:
         self._create_gui_handle(viser_server)
@@ -673,7 +669,7 @@ class ViewerRGB(ViewerParameter[Tuple[int, int, int]]):
         self.hint = hint
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
-        self.gui_handle = viser_server.add_gui_rgb(
+        self.gui_handle = viser_server.gui.add_rgb(
             self.name, self.default_value, disabled=self.disabled, visible=self.visible, hint=self.hint
         )
 
@@ -708,6 +704,6 @@ class ViewerVec3(ViewerParameter[Tuple[float, float, float]]):
         self.hint = hint
 
     def _create_gui_handle(self, viser_server: ViserServer) -> None:
-        self.gui_handle = viser_server.add_gui_vector3(
+        self.gui_handle = viser_server.gui.add_vector3(
             self.name, self.default_value, step=self.step, disabled=self.disabled, visible=self.visible, hint=self.hint
         )

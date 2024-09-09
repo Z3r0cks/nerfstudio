@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data parser for nerfstudio datasets. """
+"""Data parser for nerfstudio datasets."""
 
 from __future__ import annotations
 
@@ -167,7 +167,6 @@ class Nerfstudio(DataParser):
                 )
 
             image_filenames.append(fname)
-            from nerfstudio.utils.debugging import Debugging as db
             poses.append(np.array(frame["transform_matrix"]))
             if "mask_path" in frame:
                 mask_filepath = Path(frame["mask_path"])
@@ -240,9 +239,9 @@ class Nerfstudio(DataParser):
             method=orientation_method,
             center_method=self.config.center_method,
         )
+
         # Scale poses
         scale_factor = 1.0
-
         if self.config.auto_scale_poses:
             scale_factor /= float(torch.max(torch.abs(poses[:, :3, 3])))
         scale_factor *= self.config.scale_factor
@@ -418,16 +417,6 @@ class Nerfstudio(DataParser):
                 **metadata,
             },
         )
-        
-        # import pickle
-
-        # if split == "train":
-        #     with open('D:/Masterthesis/debugging/dataparser/dataparser_outputs_train.pkl', 'rb') as f:
-        #         dataparser_outputs = pickle.load(f)
-        # else:
-        #     with open('D:/Masterthesis/debugging/dataparser/dataparser_outputs_test.pkl', 'rb') as f:
-        #         dataparser_outputs = pickle.load(f)
-        
         return dataparser_outputs
 
     def _load_3D_points(self, ply_file_path: Path, transform_matrix: torch.Tensor, scale_factor: float):

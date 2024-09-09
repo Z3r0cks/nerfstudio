@@ -16,7 +16,6 @@
 Field for compound nerf model, adds scene contraction and image embeddings to instant ngp
 """
 
-
 from typing import Dict, Literal, Optional, Tuple
 
 import torch
@@ -38,10 +37,6 @@ from nerfstudio.field_components.field_heads import (
 from nerfstudio.field_components.mlp import MLP, MLPWithHashEncoding
 from nerfstudio.field_components.spatial_distortions import SpatialDistortion
 from nerfstudio.fields.base_field import Field, get_normalized_directions
-
-#------------------------------------------------
-from nerfstudio.utils.debugging import Debugging
-import inspect
 
 
 class NerfactoField(Field):
@@ -206,7 +201,7 @@ class NerfactoField(Field):
         )
 
     def get_density(self, ray_samples: RaySamples) -> Tuple[Tensor, Tensor, Tensor]:
-        """Computes and returns the densities.""" 
+        """Computes and returns the densities."""
         if self.spatial_distortion is not None:
             positions = ray_samples.frustums.get_positions()
             positions = self.spatial_distortion(positions)
@@ -216,25 +211,29 @@ class NerfactoField(Field):
         # Make sure the tcnn gets inputs between 0 and 1.
         selector = ((positions > 0.0) & (positions < 1.0)).all(dim=-1)
         positions = positions * selector[..., None]
+
+        assert positions.numel() > 0, "positions is empty."
+
         self._sample_locations = positions
         if not self._sample_locations.requires_grad:
             self._sample_locations.requires_grad = True
         positions_flat = positions.view(-1, 3)
+
+        assert positions_flat.numel() > 0, "positions_flat is empty."
         h = self.mlp_base(positions_flat).view(*ray_samples.frustums.shape, -1)
         density_before_activation, base_mlp_out = torch.split(h, [1, self.geo_feat_dim], dim=-1)
         self._density_before_activation = density_before_activation
+
         # Rectifying the density with an exponential is much more stable than a ReLU or
         # softplus, because it enables high post-activation (float32) density outputs
         # from smaller internal (float16) parameters.
         density = self.average_init_density * trunc_exp(density_before_activation.to(positions))
         density = density * selector[..., None]
-
         return density, base_mlp_out, ray_samples.frustums.get_positions()
-    # --------------------------------------------------------------------------------------------   
-    def get_sample_loaction(self):
-        return self._sample_locations
-    # --------------------------------------------------------------------------------------------
-    def get_outputs(self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None) -> Dict[FieldHeadNames, Tensor]:
+
+    def get_outputs(
+        self, ray_samples: RaySamples, density_embedding: Optional[Tensor] = None
+    ) -> Dict[FieldHeadNames, Tensor]:
         assert density_embedding is not None
         outputs = {}
         if ray_samples.camera_indices is None:
@@ -254,11 +253,11 @@ class NerfactoField(Field):
             else:
                 if self.use_average_appearance_embedding:
                     embedded_appearance = torch.ones(
-                        (*directions.shape[:-1], self.appearance_embedding_dim), device="cuda:0"
+                        (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
                     ) * self.embedding_appearance.mean(dim=0)
                 else:
                     embedded_appearance = torch.zeros(
-                        (*directions.shape[:-1], self.appearance_embedding_dim), device="cuda:0"
+                        (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
                     )
 
         # transients
