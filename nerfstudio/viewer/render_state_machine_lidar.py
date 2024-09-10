@@ -106,7 +106,7 @@ class RenderStateMachine(threading.Thread):
         self.mesaurement_conversion = None
         self.gui_button = self.viewer.viser_server.gui.add_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
         self.dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
-        self.compute_scale_factor = 1
+        self.compute_scale_factor = float(1)
         
         try:
             with open(self.viewer.dataparser_transforms_path) as f:
