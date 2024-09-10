@@ -304,7 +304,9 @@ class NerfactoField(Field):
             ),
             dim=-1,
         )
-        rgb = self.mlp_head(h).view(*outputs_shape, -1).to(directions)
+        with torch.cuda.device(directions.device):
+            torch.cuda.empty_cache()
+            rgb = self.mlp_head(h).view(*outputs_shape, -1).to(directions)
         outputs.update({FieldHeadNames.RGB: rgb})
 
         return outputs

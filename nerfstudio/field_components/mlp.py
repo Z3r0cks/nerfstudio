@@ -118,6 +118,7 @@ class MLP(FieldComponent):
         """Get the network configuration for tcnn if implemented"""
         activation_str = activation_to_tcnn_string(activation)
         output_activation_str = activation_to_tcnn_string(out_activation)
+        print("layer_width", layer_width)
         if layer_width in [16, 32, 64, 128]:
             network_config = {
                 "otype": "FullyFusedMLP",

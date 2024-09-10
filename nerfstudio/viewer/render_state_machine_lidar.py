@@ -282,6 +282,13 @@ class RenderStateMachine(threading.Thread):
                 with viser.gui.add_modal("Calibrate") as second_modal:
                     viser.gui.add_markdown(f'Calibrate distance: {l_scene}')
                     l_real = viser.gui.add_number("Real distance in meter:", 0, None, None, step=0.001)
+                    @l_real.on_update
+                    def _(_) -> None:
+                        print(l_real.value)
+                    # set_value_btn = viser.gui.add_button("Calibrate", color="green")
+                    # @set_value_btn.on_click
+                    # def _(_) -> None:
+                    #     l_real
                     
                     calibrate_button = viser.gui.add_button("Calibrate", color="green")
                     viser.gui.add_button("Close", color="red").on_click(lambda _: second_modal.close())
