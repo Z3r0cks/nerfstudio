@@ -148,13 +148,26 @@ class CameraOptimizer(nn.Module):
 
     def apply_to_raybundle(self, raybundle: RayBundle) -> None:
         """Apply the pose correction to the raybundle"""
+        
         if self.config.mode != "off":
-            correction_matrices = self(raybundle.camera_indices.squeeze())  # type: ignore
-            raybundle.origins = raybundle.origins + correction_matrices[:, :3, 3]
+            # Stelle sicher, dass raybundle auf dem richtigen Gerät ist
+            device = "cuda:0" # hole das Gerät des RayBundles
+            
+            # correction_matrices auf das Gerät von raybundle verschieben
+            correction_matrices = self(raybundle.camera_indices.squeeze()).to(device)  # type: ignore
+            
+            # Sicherstellen, dass die Korrekturmatrix und der raybundle auf demselben Gerät liegen
+            raybundle.origins = raybundle.origins.to(device) + correction_matrices[:, :3, 3]
+            
             try:
-                raybundle.directions = torch.bmm(correction_matrices[:, :3, :3], raybundle.directions[..., None]).squeeze()
-            except :
-                print("camera_optimizer.py: apply_to_raybundle: 147")
+                # Sicherstellen, dass die Richtungen und correction_matrices auf demselben Gerät sind
+                raybundle.directions = torch.bmm(
+                    correction_matrices[:, :3, :3].to(device),
+                    raybundle.directions[..., None].to(device)
+                ).squeeze()
+            except Exception as e:
+              print(f"camera_optimizer.py: apply_to_raybundle: 147 - {e}")
+
 
     def apply_to_camera(self, camera: Cameras) -> torch.Tensor:
         """Apply the pose correction to the world-to-camera matrix in a Camera object"""
