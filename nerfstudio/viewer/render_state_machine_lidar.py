@@ -94,7 +94,7 @@ class RenderStateMachine(threading.Thread):
         self.running = True
         
         #-------------------------------------------------------------
-        self.mesaurement_point_coordinates: list[float | str] = ["Not Set", "Not Set"]
+        self.mesaurement_point_coordinates: list[list[float] | str] = ["Not Set", "Not Set"]
         self.ray_id = 0
         self.side_id = 0
         self.density_threshold = 0
@@ -103,10 +103,8 @@ class RenderStateMachine(threading.Thread):
         self.width = 10
         self.height = 10
         self.mesh_objs = []
-        self.gui_button = self.viewer.viser_server.gui.add_button("LiDAR GUI", color="blue").on_click(lambda _: self.generate_lidar_gui())
         self.dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
         self.compute_scale_factor = float(1)
-        
         self.dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
 
         with open(self.viewer.dataparser_transforms_path) as f:
@@ -114,6 +112,7 @@ class RenderStateMachine(threading.Thread):
         
         self.translate_pos_from_omnivers = (dataparser_transforms["transform"][0][3], dataparser_transforms["transform"][1][3], dataparser_transforms["transform"][2][3])
         self.x_omni, self.y_omni, self.z_omni = self.translate_pos_from_omnivers
+        self.add_frustum_btn()
 
     def action(self, action: RenderAction):
         """Takes an action and updates the state machine
@@ -258,7 +257,7 @@ class RenderStateMachine(threading.Thread):
             
         elif id == 3:
             self.compute_scale_factor = float(1)
-            self.scale_factor_info.__setattr__("content", "Not Set")
+            self.scale_factor_info.__setattr__("content", f'Scale factor for distance measurement: {str(self.compute_scale_factor)}')
 
     
     def _open_calibrate_modal(self):
@@ -268,126 +267,147 @@ class RenderStateMachine(threading.Thread):
             point_coordinate_1 = str(self.mesaurement_point_coordinates[0])
             point_coordinate_2 = str(self.mesaurement_point_coordinates[1])
             viser.gui.add_markdown("**Calibrate Distance Measurement**")
-            viser.gui.add_markdown("Coordinate Measurement Point 1:")
+            viser.gui.add_markdown("**Coordinate Measurement Point 1:**")
             viser.gui.add_markdown(f'Point 1: {point_coordinate_1}')
-            viser.gui.add_markdown("Coordinate Measurement Point 2:")
+            viser.gui.add_markdown("**Coordinate Measurement Point 2:**")
             viser.gui.add_markdown(f'Point 2: {point_coordinate_2}')
             
-            second_modal_button = viser.gui.add_button("Use this Coordinates")
-            @second_modal_button.on_click
-            def _(_) -> None:
-                l_scene = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
-                with viser.gui.add_modal("Calibrate") as second_modal:
-                    viser.gui.add_markdown(f'Calibrate distance: {l_scene}')
-                    l_real = viser.gui.add_number("Real distance in meter:", 1.0, 0.0, None, 0.0001)
-                    
-                    calibrate_button = viser.gui.add_button("Calibrate", color="green")
-                    viser.gui.add_button("Close", color="red").on_click(lambda _: second_modal.close())
-                    @calibrate_button.on_click
-                    def _(_) -> None:
-                        self.compute_scale_factor = 1
-                        self.compute_scale_factor = l_scene / l_real.value
-                        self.scale_factor_info.__setattr__("content", str(self.compute_scale_factor))
-                        self.mesaurement_point_coordinates = ["Not Set", "Not Set"]
-                        modal.close()
-                        second_modal.close()
-                        self.delete_point_cloud()
+            if self.mesaurement_point_coordinates[0] == "Not Set" or self.mesaurement_point_coordinates[1] == "Not Set":
+                viser.gui.add_markdown("Please set both coordinates first with precise measurement")
+            else:
+                second_modal_button = viser.gui.add_button("Use this Coordinates")
+                @second_modal_button.on_click
+                def _(_) -> None:
+                    l_scene = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
+                    with viser.gui.add_modal("Calibrate") as second_modal:
+                        viser.gui.add_markdown(f'Calibrate distance: {l_scene}')
+                        l_real = viser.gui.add_number("Real distance in meter:", 1.0, 0.0, None, 0.0001)
                         
+                        calibrate_button = viser.gui.add_button("Calibrate", color="green")
+                        viser.gui.add_button("Close", color="red").on_click(lambda _: second_modal.close())
+                        @calibrate_button.on_click
+                        def _(_) -> None:
+                            self.compute_scale_factor = 1
+                            self.compute_scale_factor = l_scene / l_real.value
+                            self.scale_factor_info.__setattr__("content", f'Scale factor for distance measurement: {str(self.compute_scale_factor)}')
+                            self.mesaurement_point_coordinates = ["Not Set", "Not Set"]
+                            modal.close()
+                            second_modal.close()
+                            self.delete_point_cloud()
+                            
             viser.gui.add_button("Close", color="red").on_click(lambda _: modal.close())
                 
-                
-    def generate_lidar_gui(self) -> None:
+    
+    def add_frustum_btn(self):
+        self.viewer.viser_server.gui.set_panel_label("LiDAR NeRF Studio")
+        self.viewer.viser_server.gui.configure_theme(brand_color=(2, 125, 189), dark_mode=True, control_layout="floating")
+        add_frustum_rgb = self.viewer.viser_server.gui.add_rgb("Color Of Frustum", (235, 52, 79))
+        add_frustum_button = self.viewer.viser_server.gui.add_button("Add Frustum and GUI")
+        
+        @add_frustum_button.on_click
+        def _(_) -> None:
+            self.generate_lidar_gui(add_frustum_rgb.value)
+            add_frustum_rgb.remove()
+            add_frustum_button.__setattr__("visible", False)
+        
+    def generate_lidar_gui(self, rgb) -> None:
         '''Add GUI elements for LiDAR'''    
         
-        viser = self.viewer.viser_server        
-        #TODO: explain path in documentation
-        self.perspectiv = viser.scene.add_camera_frustum(name="perspectiv", fov=5.0, aspect=1, scale=0.1, color=(235, 52, 79), wxyz=(1, 0, 0, 0), position=(self.x_omni, self.y_omni, self.z_omni))
-                
-        with viser.gui.add_folder("Calibration"):
-            viser.gui.add_button("Measure Point 1", color="blue").on_click(lambda _: self._show_density(measure=[True, 0]))
-            viser.gui.add_button("Measure Point 2", color="blue").on_click(lambda _: self._show_density(measure=[True, 1]))
-            viser.gui.add_markdown("Coord Measurement Point 1")
-            self.m_point_1 = viser.gui.add_markdown("Not Set")
-            viser.gui.add_markdown("Coord Measurement Point 2")
-            self.m_point_2 = viser.gui.add_markdown("Not Set")
-            viser.gui.add_button("Open Calibrate Modal", color="green").on_click(lambda _: self._open_calibrate_modal())
-            self.scale_factor_info =  viser.gui.add_markdown("Scale Factor for Measurement")
-            self.scale_factor_info =  viser.gui.add_markdown(str(self.compute_scale_factor))
-            viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
-            
-            with viser.gui.add_folder("Correction", expand_by_default=False):
-                viser.gui.add_button("Delete Point 1", color="red").on_click(lambda _: self.delete_measurement_point(1))
-                viser.gui.add_button("Delete Point 2", color="red").on_click(lambda _: self.delete_measurement_point(2))
-                viser.gui.add_button("Delete Conversion", color="red").on_click(lambda _: self.delete_measurement_point(3))
-                
-        with viser.gui.add_folder("Perspectiv Position"):
-            self.perspectiv_pos_x = viser.gui.add_slider("Pos X", -20, 20, 0.001, 0)
-            self.perspectiv_pos_y = viser.gui.add_slider("Pos Y", -20, 20, 0.001, 0)
-            self.perspectiv_pos_z = viser.gui.add_slider("Pos Z (Height)", -20, 20, 0.001, 0)
+        viser = self.viewer.viser_server
+        self.frustum = viser.scene.add_camera_frustum(name="camera_frustum", fov=5.0, aspect=1, scale=0.1, color=rgb, wxyz=(1, 0, 0, 0), position=(self.x_omni, self.y_omni, self.z_omni))
+        self.scale_factor_info =  viser.gui.add_markdown(f'Scale factor for distance measurement: {str(self.compute_scale_factor)}')
         
-        with viser.gui.add_folder("Perspectiv Orientation"):
-            self.perspectiv_wxyz_x = viser.gui.add_slider("Rot X", -180, 180, 0.1, 0)
-            self.perspectiv_wxyz_y = viser.gui.add_slider("Rot Y", -180, 180, 0.1, 0)
-            self.perspectiv_wxyz_z = viser.gui.add_slider("Rot Z", -180, 180, 0.1, 0)
+        with viser.gui.add_folder("Point Cloud Settings", expand_by_default=False):
+            self.point_cloud_color = self.viewer.viser_server.gui.add_rgb("Point Cloud Color", (255, 0, 224))
+            self.point_cloud_base_size = self.viewer.viser_server.gui.add_number("Point Cloud Base Size", 0.007, 0.0005, 0.2, 0.0001)
         
+        with viser.gui.add_folder("Frustum Positioning", expand_by_default=False):
+            with viser.gui.add_folder("Frustum Location"):
+                self.frustum_pos_x = viser.gui.add_slider("Pos X", -20, 20, 0.001, 0)
+                self.frustum_pos_y = viser.gui.add_slider("Pos Y", -20, 20, 0.001, 0)
+                self.frustum_pos_z = viser.gui.add_slider("Pos Z", -20, 20, 0.001, 0)
+        
+            with viser.gui.add_folder("Frustum Orientation"):
+                self.frustumv_wxyz_x = viser.gui.add_slider("Rot X", -180, 180, 0.1, 0)
+                self.frustum_wxyz_y = viser.gui.add_slider("Rot Y", -180, 180, 0.1, 0)
+                self.frustum_wxyz_z = viser.gui.add_slider("Rot Z", -180, 180, 0.1, 0)
+                
         with open('../nerfstudio/lidar_settings.json') as f:
             lidar_data = json.load(f)
             
-        self.h_angle_resolution_dropdown = viser.gui.add_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
-        self.v_angle_resolution_dropdown = viser.gui.add_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
-        
-        for lidar in lidar_data:
-            scanner_settings = lidar_data[lidar]
-            with viser.gui.add_folder(lidar_data[lidar]["name"], expand_by_default=False):
-                viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
-                viser.gui.add_button("Generate Plot", color="green").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
-                viser.gui.add_button("Show Rays", color="pink").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
-                viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
+        with viser.gui.add_folder("LiDAR Sensors", expand_by_default=False):
+            self.h_angle_resolution_dropdown = viser.gui.add_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+            self.v_angle_resolution_dropdown = viser.gui.add_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+            
+            for lidar in lidar_data:
+                scanner_settings = lidar_data[lidar]
+                with viser.gui.add_folder(lidar_data[lidar]["name"], expand_by_default=False):
+                    viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
+                    viser.gui.add_button("Generate Plot", color="cyan").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
+                    viser.gui.add_button("Show All Rays", color="teal").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
+            
+        with viser.gui.add_folder("Measurement", expand_by_default=False):
+            with viser.gui.add_folder("Resolution Settings", expand_by_default=False):
+                with viser.gui.add_folder("Width (X)"):
+                    self.frustum_fov_x = viser.gui.add_slider("FOV Horizontal", 0, 360, 1, self.fov_x)
+                    self.frustum_width = viser.gui.add_slider("Number Of Rays", 1, 500, 1, self.width)
+                    
+                with viser.gui.add_folder("Height (Y)"):
+                    self.frustum_fov_y = viser.gui.add_slider("FOV Vertical", 0, 360, 1, self.fov_y)
+                    self.frustum_heigth = viser.gui.add_slider("Number Of Rays", 1, 500, 1, self.height)
+                    
+            with viser.gui.add_folder("Precise Measurement", expand_by_default=False):
+                viser.gui.add_button("Measure Point 1", color="violet").on_click(lambda _: self._show_density(measure=[True, 0]))
+                viser.gui.add_button("Measure Point 2", color="violet").on_click(lambda _: self._show_density(measure=[True, 1]))
+                viser.gui.add_markdown("Coord Measurement Point 1")
+                self.m_point_1 = viser.gui.add_markdown("Not Set")
+                viser.gui.add_markdown("Coord Measurement Point 2")
+                self.m_point_2 = viser.gui.add_markdown("Not Set")
+                viser.gui.add_button("Open Calibrate Modal", color="teal").on_click(lambda _: self._open_calibrate_modal())
+                
+            with viser.gui.add_folder("Individuall Measurement", expand_by_default=False):    
+                viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _: self._show_density())
+                viser.gui.add_button("Generate Clickable Point Cloud (Slow)", color="blue").on_click(lambda _: self._show_density(clickable=True))
+                viser.gui.add_button("Show All Samples Per Ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
+                viser.gui.add_button("Plot Densites", color="blue").on_click(lambda _: self._show_density(plot_density=True))
+                
+            with viser.gui.add_folder("Editing", expand_by_default=False):
+                viser.gui.add_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
+                viser.gui.add_button("Delete Point 1", color="cyan").on_click(lambda _: self.delete_measurement_point(1))
+                viser.gui.add_button("Delete Point 2", color="cyan").on_click(lambda _: self.delete_measurement_point(2))
+                viser.gui.add_button("Set Scale Factor To 1", color="violet").on_click(lambda _: self.delete_measurement_point(3))
 
         with viser.gui.add_folder("Dev Options", expand_by_default=False):
             with viser.gui.add_folder("Camera Options", expand_by_default=False):
-                viser.gui.add_button("Viser Camera To Perspectiv", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
-                viser.gui.add_button("Perspectiv To Viser Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
+                viser.gui.add_button("Scene Camera To Frustum", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
+                viser.gui.add_button("Frustum to Scene Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
+                viser.gui.add_markdown("Use 'Reset Up Direction' to reset the up direction of the camera")
                 
             with viser.gui.add_folder("Debugging", expand_by_default=False):
-                viser.gui.add_button("Show all samples per ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
-                viser.gui.add_button("Print neares density", color="cyan").on_click(lambda _: self.get_ray_infos())
-                viser.gui.add_button("Print single ray inf.", color="red").on_click(lambda _: self._scan_density())
-                viser.gui.add_button("Take screenshot", color="green").on_click(lambda _: self.take_screenshot())
-                
-            with viser.gui.add_folder("Density Options"):
-                viser.gui.add_button("Pointcloud", color="green").on_click(lambda _: self._show_density())
-                viser.gui.add_button("Pointcloud Clickable (slow)", color="pink").on_click(lambda _: self._show_density(clickable=True))
-                viser.gui.add_button("Plot Densites", color="indigo").on_click(lambda _: self._show_density(plot_density=True))
-                viser.gui.add_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
-                viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
-                
-            with viser.gui.add_folder("Density Settings"):
-                with viser.gui.add_folder("Width (X)"):
-                    self.perspectiv_fov_x = viser.gui.add_slider("FOV Horizontal", 0, 360, 1, self.fov_x)
-                    self.perspectiv_width = viser.gui.add_slider("Angular Resolution X", 1, 500, 1, self.width)
-                with viser.gui.add_folder("Height (Y)"):
-                    self.perspectiv_fov_y = viser.gui.add_slider("FOV Vertical", 0, 360, 1, self.fov_y)
-                    self.perspectiv_heigth = viser.gui.add_slider("Angular Resolution Y", 1, 500, 1, self.height)
+                viser.gui.add_button("Print Neares Density To 1", color="cyan").on_click(lambda _: self.get_ray_infos())
+                viser.gui.add_button("Print Single Ray Information", color="cyan").on_click(lambda _: self._scan_density())
+                viser.gui.add_button("Take Screenshot", color="cyan").on_click(lambda _: self.take_screenshot())
                 
             with viser.gui.add_folder("ID Settings", expand_by_default=False):
                 self.ray_id_slider = viser.gui.add_slider("Ray ID", 0, 10000, 1, 0)
                 self.side_id_slider = viser.gui.add_slider("Side ID", 0, 10000, 1, 0)
                 
-            self.perspectiv_pos_x.on_update(lambda _: self.update_cube())
-            self.perspectiv_pos_y.on_update(lambda _: self.update_cube())
-            self.perspectiv_pos_z.on_update(lambda _: self.update_cube())
-            self.perspectiv_wxyz_x.on_update(lambda _: self.update_cube())
-            self.perspectiv_wxyz_y.on_update(lambda _: self.update_cube())
-            self.perspectiv_wxyz_z.on_update(lambda _: self.update_cube())
+            self.frustum_pos_x.on_update(lambda _: self.update_cube())
+            self.frustum_pos_y.on_update(lambda _: self.update_cube())
+            self.frustum_pos_z.on_update(lambda _: self.update_cube())
+            self.frustumv_wxyz_x.on_update(lambda _: self.update_cube())
+            self.frustum_wxyz_y.on_update(lambda _: self.update_cube())
+            self.frustum_wxyz_z.on_update(lambda _: self.update_cube())
             
             self.ray_id_slider.on_update(lambda _: setattr(self, "ray_id", self.ray_id_slider.value))
             self.side_id_slider.on_update(lambda _: setattr(self, "side_id", self.side_id_slider.value))
             
-            self.perspectiv_fov_x.on_update(lambda _: setattr(self, "fov_x", self.perspectiv_fov_x.value))
-            self.perspectiv_fov_y.on_update(lambda _: setattr(self, "fov_y", self.perspectiv_fov_y.value))
-            self.perspectiv_heigth.on_update(lambda _: setattr(self, "height", self.perspectiv_heigth.value))
-            self.perspectiv_width.on_update(lambda _: setattr(self, "width", self.perspectiv_width.value))
+            self.frustum_fov_x.on_update(lambda _: setattr(self, "fov_x", self.frustum_fov_x.value))
+            self.frustum_fov_y.on_update(lambda _: setattr(self, "fov_y", self.frustum_fov_y.value))
+            self.frustum_heigth.on_update(lambda _: setattr(self, "height", self.frustum_heigth.value))
+            self.frustum_width.on_update(lambda _: setattr(self, "width", self.frustum_width.value))
+            
+        viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
 
     def take_screenshot(self):
         import pyautogui
@@ -421,26 +441,26 @@ class RenderStateMachine(threading.Thread):
         Debugging.log("ray_id: ", self.ray_id)
     
     def update_cube(self):
-        self.perspectiv.wxyz = R.from_euler('xyz', [self.perspectiv_wxyz_x.value, self.perspectiv_wxyz_y.value, self.perspectiv_wxyz_z.value], degrees=True).as_quat()
-        self.perspectiv.position = (self.perspectiv_pos_x.value + self.x_omni, self.perspectiv_pos_y.value + self.y_omni, self.perspectiv_pos_z.value + self.z_omni)
+        self.frustum.wxyz = R.from_euler('xyz', [self.frustumv_wxyz_x.value, self.frustum_wxyz_y.value, self.frustum_wxyz_z.value], degrees=True).as_quat()
+        self.frustum.position = (self.frustum_pos_x.value + self.x_omni, self.frustum_pos_y.value + self.y_omni, self.frustum_pos_z.value + self.z_omni)
 
     def _scan_density(self) -> None:
             print_list = []
             for side in range(4):
                 if side == 0:
-                    self.perspectiv.position = 1 + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
+                    self.frustum.position = 1 + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
                 elif side == 1:
-                    self.perspectiv.position = 1 + self.x_omni, 1.1 + self.y_omni, 0.9 + self.z_omni
+                    self.frustum.position = 1 + self.x_omni, 1.1 + self.y_omni, 0.9 + self.z_omni
                 elif side == 2:
-                    self.perspectiv.position = 4 + self.x_omni, + 5.9 + self.y_omni, 1.9 + self.z_omni
+                    self.frustum.position = 4 + self.x_omni, + 5.9 + self.y_omni, 1.9 + self.z_omni
                 else:
-                    self.perspectiv.position = 4 + self.x_omni, + 5.9 + self.y_omni, 0.9 + self.z_omni
+                    self.frustum.position = 4 + self.x_omni, + 5.9 + self.y_omni, 0.9 + self.z_omni
                 for horizont in range(8):
                     for vertical in range(8):
-                        Rv = vtf.SO3(wxyz=self.perspectiv.wxyz)
+                        Rv = vtf.SO3(wxyz=self.frustum.wxyz)
                         Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
                         Rv = torch.tensor(Rv.as_matrix())
-                        origin = torch.tensor(self.perspectiv.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+                        origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
                         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
                         
                         fx_value = self.width / (2 * math.tan(math.radians(self.fov_x / 2)))
@@ -487,10 +507,10 @@ class RenderStateMachine(threading.Thread):
                             self.print_single_ray_informations(print_list)
                             print_list.clear()
                             self.ray_id += 1
-                            x, y, z = self.perspectiv.position #type: ignore
-                        self.perspectiv.position = x, y + 0.1, z #type: ignore
-                    x, y, z = self.perspectiv.position #type: ignore
-                    self.perspectiv.position = x, y - 0.8, z - 0.1
+                            x, y, z = self.frustum.position #type: ignore
+                        self.frustum.position = x, y + 0.1, z #type: ignore
+                    x, y, z = self.frustum.position #type: ignore
+                    self.frustum.position = x, y - 0.8, z - 0.1
                 self.side_id += 1
                 
     def print_single_ray_informations(self, print_list):
@@ -520,9 +540,10 @@ class RenderStateMachine(threading.Thread):
             showSingelRayInf: bool = False -> Save the information of a single ray
             debugging: bool = False -> Show all points of the density
             scanner_settings: None | str = None -> the settings of the lidar scanner
+            measuer: list[bool, int] = [False, 0] -> use precise measurement
+            point_cloud_color: tuple[int, int, int] = (255, 0, 224) -> the color of the point cloud
+            point_cloud_base_size: float = 0.05 -> the base size of the point cloud
         """
-        
-        print("Showing density")
         plot_density = None
         clickable = None
         showNearesDensity = None
@@ -552,10 +573,10 @@ class RenderStateMachine(threading.Thread):
                         continue
                     int_scanner_settings[key] = float(scanner_settings[key])
         
-        Rv = vtf.SO3(wxyz=self.perspectiv.wxyz)
+        Rv = vtf.SO3(wxyz=self.frustum.wxyz)
         Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
         Rv = torch.tensor(Rv.as_matrix())
-        origin = torch.tensor(self.perspectiv.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+        origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
         c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
         
         if int_scanner_settings:
@@ -639,9 +660,10 @@ class RenderStateMachine(threading.Thread):
                     self.print_nearest_density(self.compute_distance(origin, location_current), density_current)
                     
             elif debugging:
-                    for location, density in zip(ray_locations, ray_densities):
-                        filtered_locations.append(location.tolist())   
-                        filtered_densities.append(density) 
+                for location, density in zip(ray_locations, ray_densities):
+                    filtered_locations.append(location.tolist())   
+                    filtered_densities.append(density)
+                    
             else:
                 # transmittance methode: -------------------------------------------------------------------------------------------
                 distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
@@ -672,9 +694,7 @@ class RenderStateMachine(threading.Thread):
                 self.delete_point_cloud()
             
             Debugging.log("filtered_locations", filtered_locations.shape)
-            if filtered_locations.shape == (0,):
-                Debugging.log("filtered_locations", filtered_locations)
-            obj = self.viewer.viser_server.scene.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=(255, 0, 255), point_size=0.003, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
+            obj = self.viewer.viser_server.scene.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=self.point_cloud_color.value, point_size=self.point_cloud_base_size.value, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
             self.mesh_objs.append(obj)
         
         if clickable != None or measure[0] != False:
@@ -735,8 +755,10 @@ class RenderStateMachine(threading.Thread):
                 return total_distance, location, density
 
         return None, None, None  # no collision found
-                
-    def add_point_as_mesh(self, location, index, density, scale_factor=1, base_size=0.01, color= (0, 0, 255), measure=[False, 0]):
+        
+    def add_point_as_mesh(self, location, index, density, scale_factor=1, measure=[False, 0]):
+        
+        base_size = self.point_cloud_base_size.value + 0.002
         half_size = base_size / 2 * scale_factor 
         vertices = np.array([
             [location[0] * scale_factor - half_size, location[1] * scale_factor - half_size, location[2] * scale_factor],
@@ -748,18 +770,17 @@ class RenderStateMachine(threading.Thread):
         faces = np.array([
             [0, 1, 2],
             [0, 2, 3]
-        ])
+        ]) 
         
         mesh_name = f"location_{index}"
         obj = self.viewer.viser_server.scene.add_mesh_simple(
             name=mesh_name,
             vertices=vertices,
             faces=faces,
-            color=color,
-            position=(0, 0, 0),  # position bereits in vertices definiert
+            color=self.point_cloud_color.value,
+            position=(0, 0, 0),
             visible=True,
         )
-        obj.__setattr__("color", "red")
         
         if measure[0]:
             obj.on_click(lambda _: self.add_distance_modal_between_points(location*VISER_NERFSTUDIO_SCALE_RATIO, obj, measure[1]))
@@ -769,8 +790,8 @@ class RenderStateMachine(threading.Thread):
         self.mesh_objs.append(obj)
         
     def print_nearest_density(self, distance, density):
-        position = self.perspectiv.position.tolist() if isinstance(self.perspectiv.position, np.ndarray) else self.perspectiv.position
-        rot = [self.perspectiv_pos_x.value, self.perspectiv_pos_y.value, self.perspectiv_pos_z.value]
+        position = self.frustum.position.tolist() if isinstance(self.frustum.position, np.ndarray) else self.frustum.position
+        rot = [self.frustum_pos_x.value, self.frustum_pos_y.value, self.frustum_pos_z.value]
         
         distance = float(distance) if isinstance(distance, float) else distance
         density = density.item() if isinstance(density, torch.Tensor) else density
@@ -846,12 +867,12 @@ class RenderStateMachine(threading.Thread):
         x, y, z = point
         global global_distance
         global global_density
-        global_distance = self.compute_distance(self.perspectiv.position, point)
+        global_distance = self.compute_distance(self.frustum.position, point)
         global_density = density
         distance_label = self.viewer.viser_server.scene.add_label("distance_label", f"Distance: {global_distance:.4f}", (1, 0, 0, 0), (x - 0.02, y, z + 0.04))
 
-        point3 = self.perspectiv.position + (point - self.perspectiv.position) * 0.001
-        vertices = np.array([self.perspectiv.position, point, point3])
+        point3 = self.frustum.position + (point - self.frustum.position) * 0.001
+        vertices = np.array([self.frustum.position, point, point3])
         faces = np.array([[0, 1, 2]])
         distance_ray = self.viewer.viser_server.scene.add_mesh_simple(
             name="line_mesh",
@@ -905,19 +926,19 @@ class RenderStateMachine(threading.Thread):
         clients = self.viewer.viser_server.get_clients()
         for id, client in clients.items():
             if type == "viser_perspectiv":
-                client.camera.position = self.perspectiv.position
-                client.camera.wxyz = self.perspectiv.wxyz
+                client.camera.position = self.frustum.position
+                client.camera.wxyz = self.frustum.wxyz
             else:
-                self.perspectiv.position = client.camera.position
-                self.perspectiv.wxyz = client.camera.wxyz
-                x, y, z = self.perspectiv.position
-                q_x, q_y, q_z = R.from_quat(self.perspectiv.wxyz).as_euler('xyz', degrees=True)
-                self.perspectiv_pos_x.value = x
-                self.perspectiv_pos_y.value = y
-                self.perspectiv_pos_z.value = z
-                self.perspectiv_wxyz_x.value = q_x
-                self.perspectiv_wxyz_y.value = q_y
-                self.perspectiv_wxyz_z.value = q_z
+                self.frustum.position = client.camera.position
+                self.frustum.wxyz = client.camera.wxyz
+                x, y, z = self.frustum.position
+                q_x, q_y, q_z = R.from_quat(self.frustum.wxyz).as_euler('xyz', degrees=True)
+                self.frustum_pos_x.value = x
+                self.frustum_pos_y.value = y
+                self.frustum_pos_z.value = z
+                self.frustumv_wxyz_x.value = q_x
+                self.frustum_wxyz_y.value = q_y
+                self.frustum_wxyz_z.value = q_z
 
  
     def delete_point_cloud(self):

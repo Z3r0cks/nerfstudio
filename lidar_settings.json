@@ -9,6 +9,7 @@
       "horizontal_opening_angel": 276.0,
       "vertical_opening_angel": 1.0
    },
+   
    "multiscan_100": {
       "name": "MultiScan 100",
       "description": "Multiscan 100. Horizontal opening angle 360°, vertical opening angle 65°. Distance range 0.05m to 62m. Angular resolution 0.125°.",
