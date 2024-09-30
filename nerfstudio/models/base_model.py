@@ -177,11 +177,11 @@ class Model(nn.Module):
             )
             
         else:
-            ray = camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
+            rayBundle = camera.generate_rays(camera_indices=0, keep_shape=True, obb_box=obb_box)
             shape = [kwargs.get("width"), kwargs.get("height"), 1]
             pixel_area = torch.full(shape, int(kwargs.get("pixel_area") or 1), dtype=torch.float32)
-            ray.pixel_area = pixel_area
-            return self.get_outputs_for_camera_ray_bundle(ray)
+            rayBundle.pixel_area = pixel_area
+            return self.get_outputs_for_camera_ray_bundle(rayBundle)
 
     @torch.no_grad()
     def get_outputs_for_camera_ray_bundle(self, camera_ray_bundle: RayBundle) -> Dict[str, torch.Tensor]:

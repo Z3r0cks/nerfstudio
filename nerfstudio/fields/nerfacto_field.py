@@ -202,6 +202,7 @@ class NerfactoField(Field):
 
     def get_density(self, ray_samples: RaySamples) -> Tuple[Tensor, Tensor, Tensor]:
         """Computes and returns the densities."""
+        
         if self.spatial_distortion is not None:
             positions = ray_samples.frustums.get_positions()
             positions = self.spatial_distortion(positions)

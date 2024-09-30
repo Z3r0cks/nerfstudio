@@ -222,29 +222,6 @@ class RenderStateMachine(threading.Thread):
 
     def mark_nearby(self, tree, point, distance_threshold):
         return tree.query_ball_point(point, r=distance_threshold, p=2)
-
-    def filter_nearby_indices(self, points, distance_threshold=0.003, n_jobs=4):
-        """Returns indices of points that are not removed due to proximity"""
-        from scipy.spatial import cKDTree
-        from concurrent.futures import ThreadPoolExecutor
-
-        # Aufbau eines KD-Baums für schnelle Nachbarschaftssuche
-        tree = cKDTree(points)
-        kept_indices = np.ones(len(points), dtype=bool)
-
-        def process_point(i):
-            if kept_indices[i]:
-                # Suche alle nahen Punkte, die innerhalb des Schwellenwerts liegen
-                nearby_indices = self.mark_nearby(tree, points[i], distance_threshold)
-                kept_indices[nearby_indices] = False
-                kept_indices[i] = True
-
-        # Parallelverarbeitung der Punkte mit ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=n_jobs) as executor:
-            list(executor.map(process_point, range(len(points))))
-
-        # Rückgabe der Indizes der verbleibenden Punkte
-        return np.where(kept_indices)[0]
     
     def delete_measurement_point(self, id):
         if id == 1:
@@ -342,9 +319,9 @@ class RenderStateMachine(threading.Thread):
             for lidar in lidar_data:
                 scanner_settings = lidar_data[lidar]
                 with viser.gui.add_folder(lidar_data[lidar]["name"], expand_by_default=False):
-                    viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(scanner_settings=scanner_settings))
-                    viser.gui.add_button("Generate Plot", color="cyan").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(plot_density=True, scanner_settings=scanner_settings))
-                    viser.gui.add_button("Show All Rays", color="teal").on_click(lambda _, scanner_settings=scanner_settings: self._show_density(debugging=True, scanner_settings=scanner_settings))
+                    viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(scanner_settings=scanner_settings))
+                    viser.gui.add_button("Generate Plot", color="cyan").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(plot_density=True, scanner_settings=scanner_settings))
+                    viser.gui.add_button("Show All Rays", color="teal").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(debugging=True, scanner_settings=scanner_settings))
             
         with viser.gui.add_folder("Measurement", expand_by_default=False):
             with viser.gui.add_folder("Resolution Settings", expand_by_default=False):
@@ -357,8 +334,8 @@ class RenderStateMachine(threading.Thread):
                     self.frustum_heigth = viser.gui.add_slider("Number Of Rays", 1, 500, 1, self.height)
                     
             with viser.gui.add_folder("Precise Measurement", expand_by_default=False):
-                viser.gui.add_button("Measure Point 1", color="violet").on_click(lambda _: self._show_density(measure=[True, 0]))
-                viser.gui.add_button("Measure Point 2", color="violet").on_click(lambda _: self._show_density(measure=[True, 1]))
+                viser.gui.add_button("Measure Point 1", color="violet").on_click(lambda _: self.generate_lidar(measure=[True, 0]))
+                viser.gui.add_button("Measure Point 2", color="violet").on_click(lambda _: self.generate_lidar(measure=[True, 1]))
                 viser.gui.add_markdown("Coord Measurement Point 1")
                 self.m_point_1 = viser.gui.add_markdown("Not Set")
                 viser.gui.add_markdown("Coord Measurement Point 2")
@@ -366,10 +343,10 @@ class RenderStateMachine(threading.Thread):
                 viser.gui.add_button("Open Calibrate Modal", color="teal").on_click(lambda _: self._open_calibrate_modal())
                 
             with viser.gui.add_folder("Individuall Measurement", expand_by_default=False):    
-                viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _: self._show_density())
-                viser.gui.add_button("Generate Clickable Point Cloud (Slow)", color="blue").on_click(lambda _: self._show_density(clickable=True))
-                viser.gui.add_button("Show All Samples Per Ray", color="blue").on_click(lambda _: self._show_density(debugging=True))
-                viser.gui.add_button("Plot Densites", color="blue").on_click(lambda _: self._show_density(plot_density=True))
+                viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _: self.generate_lidar())
+                viser.gui.add_button("Generate Clickable Point Cloud (Slow)", color="blue").on_click(lambda _: self.generate_lidar(clickable=True))
+                viser.gui.add_button("Show All Samples Per Ray", color="blue").on_click(lambda _: self.generate_lidar(debugging=True))
+                viser.gui.add_button("Plot Densites", color="blue").on_click(lambda _: self.generate_lidar(plot_density=True))
                 
             with viser.gui.add_folder("Editing", expand_by_default=False):
                 viser.gui.add_button("Toggle Labels", color="cyan").on_click(lambda _: self.toggle_labels())
@@ -433,7 +410,7 @@ class RenderStateMachine(threading.Thread):
 
     def get_ray_infos(self) -> None:
         for i in range(50):
-            self._show_density(showNearesDensity=True)
+            self.generate_lidar(showNearesDensity=True)
         self.increment_ray_id()
     
     def increment_ray_id(self) -> None:
@@ -530,7 +507,7 @@ class RenderStateMachine(threading.Thread):
                 row = [self.side_id] + [self.ray_id] + info
                 csvwriter.writerow(row)
         
-    def _show_density(self, **kwargs) -> None:
+    def generate_lidar(self, **kwargs) -> None:
         """Show the density in the viewer
 
         kwargs:
