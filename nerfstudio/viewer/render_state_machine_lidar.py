@@ -32,7 +32,9 @@ from nerfstudio.viewer_legacy.server import viewer_utils
 
 #-------------------------------------------------------------
 from nerfstudio.utils.debugging import Debugging
-from scipy.spatial.transform import Rotation as R
+from scipy.spatial.transform import Rotation as R           
+from pathlib import Path
+import os
 import viser.transforms as vtf
 import math
 import csv
@@ -308,13 +310,14 @@ class RenderStateMachine(threading.Thread):
                 self.frustumv_wxyz_x = viser.gui.add_slider("Rot X", -180, 180, 0.1, 0)
                 self.frustum_wxyz_y = viser.gui.add_slider("Rot Y", -180, 180, 0.1, 0)
                 self.frustum_wxyz_z = viser.gui.add_slider("Rot Z", -180, 180, 0.1, 0)
-                
-        with open('../nerfstudio/lidar_settings.json') as f:
+        
+        with open(os.path.join(Path(__file__).resolve().parents[2], 'lidar_settings.json')) as f:
             lidar_data = json.load(f)
             
         with viser.gui.add_folder("LiDAR Sensors", expand_by_default=False):
-            self.h_angle_resolution_dropdown = viser.gui.add_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
-            self.v_angle_resolution_dropdown = viser.gui.add_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+            with viser.gui.add_folder("Resolution"):
+                self.h_angle_resolution_dropdown = viser.gui.add_dropdown("Horizontal Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
+                self.v_angle_resolution_dropdown = viser.gui.add_dropdown("Vertical Angle Resolution", ["0.125", "0.25", "0.5", "1", "2", "3", "4", "5"], "1")
             
             for lidar in lidar_data:
                 scanner_settings = lidar_data[lidar]
@@ -354,68 +357,68 @@ class RenderStateMachine(threading.Thread):
                 viser.gui.add_button("Delete Point 2", color="cyan").on_click(lambda _: self.delete_measurement_point(2))
                 viser.gui.add_button("Set Scale Factor To 1", color="violet").on_click(lambda _: self.delete_measurement_point(3))
 
-        with viser.gui.add_folder("Dev Options", expand_by_default=False):
-            with viser.gui.add_folder("Camera Options", expand_by_default=False):
-                viser.gui.add_button("Scene Camera To Frustum", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
-                viser.gui.add_button("Frustum to Scene Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
-                viser.gui.add_markdown("Use 'Reset Up Direction' to reset the up direction of the camera")
+        # with viser.gui.add_folder("Dev Options", expand_by_default=False):
+        #     with viser.gui.add_folder("Camera Options", expand_by_default=False):
+        #         viser.gui.add_button("Scene Camera To Frustum", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
+        #         viser.gui.add_button("Frustum to Scene Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
+        #         viser.gui.add_markdown("Use 'Reset Up Direction' to reset the up direction of the camera")
                 
-            with viser.gui.add_folder("Debugging", expand_by_default=False):
-                viser.gui.add_button("Print Neares Density To 1", color="cyan").on_click(lambda _: self.get_ray_infos())
-                viser.gui.add_button("Print Single Ray Information", color="cyan").on_click(lambda _: self._scan_density())
-                viser.gui.add_button("Take Screenshot", color="cyan").on_click(lambda _: self.take_screenshot())
+        #     with viser.gui.add_folder("Debugging", expand_by_default=False):
+        #         viser.gui.add_button("Print Neares Density To 1", color="cyan").on_click(lambda _: self.get_ray_infos())
+        #         viser.gui.add_button("Print Single Ray Information", color="cyan").on_click(lambda _: self._scan_density())
+        #         viser.gui.add_button("Take Screenshot", color="cyan").on_click(lambda _: self.take_screenshot())
                 
-            with viser.gui.add_folder("ID Settings", expand_by_default=False):
-                self.ray_id_slider = viser.gui.add_slider("Ray ID", 0, 10000, 1, 0)
-                self.side_id_slider = viser.gui.add_slider("Side ID", 0, 10000, 1, 0)
+        #     with viser.gui.add_folder("ID Settings", expand_by_default=False):
+        #         self.ray_id_slider = viser.gui.add_slider("Ray ID", 0, 10000, 1, 0)
+        #         self.side_id_slider = viser.gui.add_slider("Side ID", 0, 10000, 1, 0)
                 
-            self.frustum_pos_x.on_update(lambda _: self.update_cube())
-            self.frustum_pos_y.on_update(lambda _: self.update_cube())
-            self.frustum_pos_z.on_update(lambda _: self.update_cube())
-            self.frustumv_wxyz_x.on_update(lambda _: self.update_cube())
-            self.frustum_wxyz_y.on_update(lambda _: self.update_cube())
-            self.frustum_wxyz_z.on_update(lambda _: self.update_cube())
-            
-            self.ray_id_slider.on_update(lambda _: setattr(self, "ray_id", self.ray_id_slider.value))
-            self.side_id_slider.on_update(lambda _: setattr(self, "side_id", self.side_id_slider.value))
-            
-            self.frustum_fov_x.on_update(lambda _: setattr(self, "fov_x", self.frustum_fov_x.value))
-            self.frustum_fov_y.on_update(lambda _: setattr(self, "fov_y", self.frustum_fov_y.value))
-            self.frustum_heigth.on_update(lambda _: setattr(self, "height", self.frustum_heigth.value))
-            self.frustum_width.on_update(lambda _: setattr(self, "width", self.frustum_width.value))
+        self.frustum_pos_x.on_update(lambda _: self.update_cube())
+        self.frustum_pos_y.on_update(lambda _: self.update_cube())
+        self.frustum_pos_z.on_update(lambda _: self.update_cube())
+        self.frustumv_wxyz_x.on_update(lambda _: self.update_cube())
+        self.frustum_wxyz_y.on_update(lambda _: self.update_cube())
+        self.frustum_wxyz_z.on_update(lambda _: self.update_cube())
+        
+        # self.ray_id_slider.on_update(lambda _: setattr(self, "ray_id", self.ray_id_slider.value))
+        # self.side_id_slider.on_update(lambda _: setattr(self, "side_id", self.side_id_slider.value))
+        
+        self.frustum_fov_x.on_update(lambda _: setattr(self, "fov_x", self.frustum_fov_x.value))
+        self.frustum_fov_y.on_update(lambda _: setattr(self, "fov_y", self.frustum_fov_y.value))
+        self.frustum_heigth.on_update(lambda _: setattr(self, "height", self.frustum_heigth.value))
+        self.frustum_width.on_update(lambda _: setattr(self, "width", self.frustum_width.value))
             
         viser.gui.add_button("Clear Point Cloud", color="red").on_click(lambda _: self.delete_point_cloud())
 
-    def take_screenshot(self):
-        import pyautogui
-        # from PIL import Image
+    # def take_screenshot(self):
+    #     import pyautogui
+    #     # from PIL import Image
         
-        file_name = "id_" + str(self.ray_id) + ".png"
-        file_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/screenshots/single_ray_density/"
-        screenshot = pyautogui.screenshot()
+    #     file_name = "id_" + str(self.ray_id) + ".png"
+    #     file_dir = "C:/Users/free3D/Desktop/Patrick_Kaserer/screenshots/single_ray_density/"
+    #     screenshot = pyautogui.screenshot()
         
-        crop_size = 300  # 50 pixels in all directions means a total of 100x100 pixels
+    #     crop_size = 300  # 50 pixels in all directions means a total of 100x100 pixels
 
-        # Get the dimensions of the screenshot
-        width, height = screenshot.size
+    #     # Get the dimensions of the screenshot
+    #     width, height = screenshot.size
 
-        # Calculate the cropping box centered in the screenshot
-        left = (width - crop_size) // 2
-        top = (height - crop_size) // 2
-        right = left + crop_size
-        bottom = top + crop_size
+    #     # Calculate the cropping box centered in the screenshot
+    #     left = (width - crop_size) // 2
+    #     top = (height - crop_size) // 2
+    #     right = left + crop_size
+    #     bottom = top + crop_size
         
-        cropped_image = screenshot.crop((left, top, right, bottom))
-        cropped_image.save(file_dir + file_name)
+    #     cropped_image = screenshot.crop((left, top, right, bottom))
+    #     cropped_image.save(file_dir + file_name)
 
-    def get_ray_infos(self) -> None:
-        for i in range(50):
-            self.generate_lidar(showNearesDensity=True)
-        self.increment_ray_id()
+    # def get_ray_infos(self) -> None:
+    #     for i in range(50):
+    #         self.generate_lidar(showNearesDensity=True)
+    #     self.increment_ray_id()
     
-    def increment_ray_id(self) -> None:
-        self.ray_id += 1
-        Debugging.log("ray_id: ", self.ray_id)
+    # def increment_ray_id(self) -> None:
+    #     self.ray_id += 1
+    #     Debugging.log("ray_id: ", self.ray_id)
     
     def update_cube(self):
         self.frustum.wxyz = R.from_euler('xyz', [self.frustumv_wxyz_x.value, self.frustum_wxyz_y.value, self.frustum_wxyz_z.value], degrees=True).as_quat()
