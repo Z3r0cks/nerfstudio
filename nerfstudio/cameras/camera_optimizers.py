@@ -142,6 +142,8 @@ class CameraOptimizer(nn.Module):
 
         # Return: identity if no transforms are needed, otherwise multiply transforms together.
         if len(outputs) == 0:
+            if indices.dim() == 0:
+                indices = indices.unsqueeze(0)
             # Note that using repeat() instead of tile() here would result in unnecessary copies.
             return torch.eye(4, device=self.device)[None, :3, :4].tile(indices.shape[0], 1, 1)
         return functools.reduce(pose_utils.multiply, outputs)
@@ -150,17 +152,11 @@ class CameraOptimizer(nn.Module):
         """Apply the pose correction to the raybundle"""
         
         if self.config.mode != "off":
-            # Stelle sicher, dass raybundle auf dem richtigen Gerät ist
             device = "cuda:0" # hole das Gerät des RayBundles
-            
-            # correction_matrices auf das Gerät von raybundle verschieben
             correction_matrices = self(raybundle.camera_indices.squeeze()).to(device)  # type: ignore
-            
-            # Sicherstellen, dass die Korrekturmatrix und der raybundle auf demselben Gerät liegen
             raybundle.origins = raybundle.origins.to(device) + correction_matrices[:, :3, 3]
             
             try:
-                # Sicherstellen, dass die Richtungen und correction_matrices auf demselben Gerät sind
                 raybundle.directions = torch.bmm(
                     correction_matrices[:, :3, :3].to(device),
                     raybundle.directions[..., None].to(device)

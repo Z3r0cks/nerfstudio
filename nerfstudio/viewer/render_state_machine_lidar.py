@@ -16,29 +16,30 @@
 from __future__ import annotations
 
 import contextlib
+import csv
+import json
+import math
+import os
 import threading
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple, get_args
 
 import numpy as np
 import torch
+import viser.transforms as vtf
+from scipy.spatial.transform import Rotation as R
 from viser import ClientHandle
+
 from nerfstudio.cameras.cameras import Cameras
 from nerfstudio.utils import colormaps, writer
+#-------------------------------------------------------------
+from nerfstudio.utils.debugging import Debugging
 from nerfstudio.utils.writer import GLOBAL_BUFFER, EventName, TimeWriter
 from nerfstudio.viewer.utils import CameraState, get_camera
 from nerfstudio.viewer_legacy.server import viewer_utils
 
-#-------------------------------------------------------------
-from nerfstudio.utils.debugging import Debugging
-from scipy.spatial.transform import Rotation as R           
-from pathlib import Path
-import os
-import viser.transforms as vtf
-import math
-import csv
-import json
 #-------------------------------------------------------------
 VISER_NERFSTUDIO_SCALE_RATIO: float = 1.0
 
@@ -99,11 +100,11 @@ class RenderStateMachine(threading.Thread):
         self.mesaurement_point_coordinates: list[list[float] | str] = ["Not Set", "Not Set"]
         self.ray_id = 0
         self.side_id = 0
-        self.density_threshold = 0
-        self.fov_x = 15
-        self.fov_y = 15
-        self.width = 10
-        self.height = 10
+        self.density_threshold = 1e-5000
+        self.fov_x = 1
+        self.fov_y = 1
+        self.width = 1
+        self.height = 1
         self.mesh_objs = []
         self.dataparser_transforms = {'transform': [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]}
         self.compute_scale_factor = float(1)
@@ -256,6 +257,7 @@ class RenderStateMachine(threading.Thread):
             else:
                 second_modal_button = viser.gui.add_button("Use this Coordinates")
                 @second_modal_button.on_click
+                
                 def _(_) -> None:
                     l_scene = self.compute_distance(self.mesaurement_point_coordinates[0], self.mesaurement_point_coordinates[1])
                     with viser.gui.add_modal("Calibrate") as second_modal:
@@ -274,8 +276,7 @@ class RenderStateMachine(threading.Thread):
                             second_modal.close()
                             self.delete_point_cloud()
                             
-            viser.gui.add_button("Close", color="red").on_click(lambda _: modal.close())
-                
+            viser.gui.add_button("Close", color="red").on_click(lambda _: modal.close())       
     
     def add_frustum_btn(self):
         self.viewer.viser_server.gui.set_panel_label("LiDAR NeRF Studio")
@@ -299,6 +300,7 @@ class RenderStateMachine(threading.Thread):
         with viser.gui.add_folder("Point Cloud Settings", expand_by_default=False):
             self.point_cloud_color = self.viewer.viser_server.gui.add_rgb("Point Cloud Color", (255, 0, 224))
             self.point_cloud_base_size = self.viewer.viser_server.gui.add_number("Point Cloud Base Size", 0.007, 0.0005, 0.2, 0.0001)
+            self.max_distance = viser.gui.add_slider("Max Distance (0 = Max)", 0, 1000, 0.00001, 0)
         
         with viser.gui.add_folder("Frustum Positioning", expand_by_default=False):
             with viser.gui.add_folder("Frustum Location"):
@@ -322,19 +324,21 @@ class RenderStateMachine(threading.Thread):
             for lidar in lidar_data:
                 scanner_settings = lidar_data[lidar]
                 with viser.gui.add_folder(lidar_data[lidar]["name"], expand_by_default=False):
+                    viser.gui.add_markdown("Angle Resolution: " + str(lidar_data[lidar]["_angle_resolution"]))
                     viser.gui.add_button("Generate Point Cloud", color="blue").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(scanner_settings=scanner_settings))
                     viser.gui.add_button("Generate Plot", color="cyan").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(plot_density=True, scanner_settings=scanner_settings))
+                    viser.gui.add_button("Clickable Point Cloud", color="violet").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(clickable=True, scanner_settings=scanner_settings))
                     viser.gui.add_button("Show All Rays", color="teal").on_click(lambda _, scanner_settings=scanner_settings: self.generate_lidar(debugging=True, scanner_settings=scanner_settings))
             
         with viser.gui.add_folder("Measurement", expand_by_default=False):
             with viser.gui.add_folder("Resolution Settings", expand_by_default=False):
                 with viser.gui.add_folder("Width (X)"):
                     self.frustum_fov_x = viser.gui.add_slider("FOV Horizontal", 0, 360, 1, self.fov_x)
-                    self.frustum_width = viser.gui.add_slider("Number Of Rays", 1, 500, 1, self.width)
+                    self.frustum_width = viser.gui.add_slider("Number Of Rays", 1, 10000, 1, self.width)
                     
                 with viser.gui.add_folder("Height (Y)"):
                     self.frustum_fov_y = viser.gui.add_slider("FOV Vertical", 0, 360, 1, self.fov_y)
-                    self.frustum_heigth = viser.gui.add_slider("Number Of Rays", 1, 500, 1, self.height)
+                    self.frustum_heigth = viser.gui.add_slider("Number Of Rays", 1, 10000, 1, self.height)
                     
             with viser.gui.add_folder("Precise Measurement", expand_by_default=False):
                 viser.gui.add_button("Measure Point 1", color="violet").on_click(lambda _: self.generate_lidar(measure=[True, 0]))
@@ -357,21 +361,25 @@ class RenderStateMachine(threading.Thread):
                 viser.gui.add_button("Delete Point 2", color="cyan").on_click(lambda _: self.delete_measurement_point(2))
                 viser.gui.add_button("Set Scale Factor To 1", color="violet").on_click(lambda _: self.delete_measurement_point(3))
 
-        # with viser.gui.add_folder("Dev Options", expand_by_default=False):
-        #     with viser.gui.add_folder("Camera Options", expand_by_default=False):
-        #         viser.gui.add_button("Scene Camera To Frustum", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
-        #         viser.gui.add_button("Frustum to Scene Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
-        #         viser.gui.add_markdown("Use 'Reset Up Direction' to reset the up direction of the camera")
+        with viser.gui.add_folder("Dev Options", expand_by_default=False):
+            with viser.gui.add_folder("Camera Options", expand_by_default=False):
+                viser.gui.add_button("Scene Camera To Frustum", color="violet").on_click(lambda _: self.set_perspectiv_camera("viser_perspectiv"))
+                viser.gui.add_button("Frustum to Scene Camera", color="violet").on_click(lambda _: self.set_perspectiv_camera(""))
+                viser.gui.add_markdown("Use 'Reset Up Direction' to reset the up direction of the camera")
                 
-        #     with viser.gui.add_folder("Debugging", expand_by_default=False):
-        #         viser.gui.add_button("Print Neares Density To 1", color="cyan").on_click(lambda _: self.get_ray_infos())
-        #         viser.gui.add_button("Print Single Ray Information", color="cyan").on_click(lambda _: self._scan_density())
-        #         viser.gui.add_button("Take Screenshot", color="cyan").on_click(lambda _: self.take_screenshot())
+            with viser.gui.add_folder("Debugging", expand_by_default=False):
+                # viser.gui.add_button("Print Neares Density To 1", color="cyan").on_click(lambda _: self.get_ray_infos())
+                # self.threshold_slider = viser.gui.add_slider("Threshold", -1000000, 1000000, 0.001, 0)
+                self.debug_text_distance = viser.gui.add_text("distance", "")
+                self.debug_text_site = viser.gui.add_text("cube site", "")
+                viser.gui.add_button("Print Single Ray Information", color="cyan").on_click(lambda _: self._scan_density())
+                # viser.gui.add_button("Take Screenshot", color="cyan").on_click(lambda _: self.take_screenshot())
                 
-        #     with viser.gui.add_folder("ID Settings", expand_by_default=False):
-        #         self.ray_id_slider = viser.gui.add_slider("Ray ID", 0, 10000, 1, 0)
-        #         self.side_id_slider = viser.gui.add_slider("Side ID", 0, 10000, 1, 0)
+            with viser.gui.add_folder("ID Settings", expand_by_default=False):
+                self.ray_id_slider = viser.gui.add_slider("Ray ID", 0, 10000, 1, 0)
+                self.side_id_slider = viser.gui.add_slider("Side ID", 0, 10000, 1, 0)
                 
+        # self.threshold_slider.on_update(lambda _: setattr(self, "density_threshold", self.threshold_slider.value))
         self.frustum_pos_x.on_update(lambda _: self.update_cube())
         self.frustum_pos_y.on_update(lambda _: self.update_cube())
         self.frustum_pos_z.on_update(lambda _: self.update_cube())
@@ -424,69 +432,100 @@ class RenderStateMachine(threading.Thread):
         self.frustum.wxyz = R.from_euler('xyz', [self.frustumv_wxyz_x.value, self.frustum_wxyz_y.value, self.frustum_wxyz_z.value], degrees=True).as_quat()
         self.frustum.position = (self.frustum_pos_x.value + self.x_omni, self.frustum_pos_y.value + self.y_omni, self.frustum_pos_z.value + self.z_omni)
 
+        
     def _scan_density(self) -> None:
             print_list = []
+            side_distance = 0
             for side in range(4):
                 if side == 0:
-                    self.frustum.position = 1 + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
+                    side_distance = 1
+                    self.frustum.position = side_distance + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
                 elif side == 1:
-                    self.frustum.position = 1 + self.x_omni, 1.1 + self.y_omni, 0.9 + self.z_omni
+                    self.frustum.position = side_distance + self.x_omni, 1.1 + self.y_omni, 0.9 + self.z_omni
                 elif side == 2:
-                    self.frustum.position = 4 + self.x_omni, + 5.9 + self.y_omni, 1.9 + self.z_omni
+                    side_distance = 4
+                    self.frustum.position = side_distance + self.x_omni, + -5.9 + self.y_omni, 1.9 + self.z_omni
                 else:
-                    self.frustum.position = 4 + self.x_omni, + 5.9 + self.y_omni, 0.9 + self.z_omni
+                    self.frustum.position = side_distance + self.x_omni, + -5.9 + self.y_omni, 0.9 + self.z_omni
                 for horizont in range(8):
                     for vertical in range(8):
-                        Rv = vtf.SO3(wxyz=self.frustum.wxyz)
-                        Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
-                        Rv = torch.tensor(Rv.as_matrix())
-                        origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
-                        c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
-                        
-                        fx_value = self.width / (2 * math.tan(math.radians(self.fov_x / 2)))
-                        fy_value = self.height / (2 * math.tan(math.radians(self.fov_x / 2)))
-
-                        fx = torch.tensor([[fx_value]], device='cuda:0')
-                        fy = torch.tensor([[fy_value]], device='cuda:0')
-                        cx = torch.tensor([[self.width/2]], device='cuda:0')
-                        cy = torch.tensor([[self.height/2]], device='cuda:0')
-
-                        camera = Cameras(
-                            camera_to_worlds=c2w,
-                            fx=fx,
-                            fy=fy,
-                            cx=cx,
-                            cy=cy,
-                            width=torch.tensor([[self.width]]),
-                            height=torch.tensor([[self.height]]),
-                            distortion_params=None,
-                            camera_type=torch.tensor([[1]], device='cuda:0'),
-                            times=torch.tensor([[0.]], device='cuda:0')
-                        )
-                        assert isinstance(camera, Cameras)
-                        outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
-
-                        all_densities = []
-                        all_density_locations = []
-                        all_rgbs = []
+                        x, y, z = self.frustum.position #type: ignore
+                        self.frustum.position = side_distance, y, z
                             
-                        for densities, locations, rgb in zip(outputs["densities"], outputs["densities_locations"], outputs["rgb"]):
-                            all_densities.append(densities)
-                            all_density_locations.append(locations)
-                            all_rgbs.append(rgb)
+                        for deep in range(8):
+                            x, y, z = self.frustum.position #type: ignore
+                            real_distance = 0
 
-                        all_densities = torch.cat([ray_densities for ray_densities in all_densities if ray_densities.numel() > 0])
-                        all_density_locations = torch.cat([ray_locations for ray_locations in all_density_locations if ray_locations.numel() > 0])
-                        all_rgbs = torch.cat([ray_rgbs for ray_rgbs in all_rgbs if ray_rgbs.numel() > 0])
-                        
-                        for ray_locations, ray_densities, rgb in zip(all_density_locations, all_densities, all_rgbs):
-                            for location, density in zip(ray_locations, ray_densities):
-                                rgblist_normalized = rgb.tolist()
-                                rgblist = [int(val * 255) for val in rgblist_normalized]
-                                print_list.append([self.compute_distance(origin, location), density.item(), rgblist])
-                            self.print_single_ray_informations(print_list)
-                            print_list.clear()
-                            self.ray_id += 1
+                            Rv = vtf.SO3(wxyz=self.frustum.wxyz)
+                            Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
+                            Rv = torch.tensor(Rv.as_matrix())
+                            origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+                            c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
+                            
+                            fov_x = self.fov_x
+                            fov_y = self.fov_y
+                            fx_value = self.width / (2 * math.tan(math.radians(fov_x / 2)))
+                            fy_value = self.height / (2 * math.tan(math.radians(fov_y / 2)))
+                            
+                            fx = torch.tensor([[fx_value]], device='cuda:0')
+                            fy = torch.tensor([[fy_value]], device='cuda:0')
+                            cx = torch.tensor([[self.width / 2]], device='cuda:0')
+                            cy = torch.tensor([[self.height / 2]], device='cuda:0')
+                            
+                            camera = Cameras(
+                                camera_to_worlds=c2w,
+                                fx=fx,
+                                fy=fy,
+                                cx=cx,
+                                cy=cy,
+                                width=torch.tensor([[self.width]]),
+                                height=torch.tensor([[self.height]]),
+                                distortion_params=None,
+                                camera_type=10,
+                                times=torch.tensor([[0.]], device='cuda:0')
+                            )
+                            
+                            assert isinstance(camera, Cameras)
+                            outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
+
+                            all_densities = []
+                            all_density_locations = []
+                            
+                            for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
+                                if densities.numel() > 0:
+                                    all_densities.append(densities)
+                                if locations.numel() > 0:
+                                    all_density_locations.append(locations)
+                                    
+                            all_densities = torch.cat(all_densities)
+                            all_density_locations = torch.cat(all_density_locations)
+                    
+                            filtered_distances = []
+                            filtered_densities = []
+                            filtered_diff = []
+                            
+                            for ray_locations, ray_densities in zip(all_density_locations, all_densities):
+                                if ray_densities.numel() == 0:
+                                    continue
+                                
+                                distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
+                                distance = self.compute_distance(self.frustum.position, location)
+                                real_distance = round(distance - 1)
+                                diff = real_distance - (distance - 1)
+                                if type(density) != None:
+                                    density = density.cpu().numpy() #type: ignore
+                                    
+                                filtered_distances.append(distance)
+                                filtered_densities.append(float(density)) #type: ignore
+                                filtered_diff.append(diff) #type: ignore
+                            
+                            for distance, density, diff in zip(filtered_distances, filtered_densities, filtered_diff):
+                                print_list.append([real_distance, distance-1, diff, density])
+                                self.print_single_ray_informations(print_list)
+                                print_list.clear()
+                                self.ray_id += 1
+                                    
+                            self.frustum.position = x + 0.4, y, z #type: ignore
                             x, y, z = self.frustum.position #type: ignore
                         self.frustum.position = x, y + 0.1, z #type: ignore
                     x, y, z = self.frustum.position #type: ignore
@@ -494,12 +533,12 @@ class RenderStateMachine(threading.Thread):
                 self.side_id += 1
                 
     def print_single_ray_informations(self, print_list):
-        self.csv_filename = 'single_ray_informations.csv'
+        self.csv_filename = 'validation.csv'
             # "side id" "id", "location", "distance", "density", rgb
         try:
             with open(self.csv_filename, 'x', newline='') as csvfile:
                 csvwriter = csv.writer(csvfile)
-                headers = ["side_id", "ray_id", "distance", "density", "rgb"]
+                headers = ["side_id", "ray_id", "real_distance", "distance", "diff", "density"]
                 csvwriter.writerow(headers)
         except FileExistsError:
             pass
@@ -575,7 +614,7 @@ class RenderStateMachine(threading.Thread):
             width = self.width
             fov_x = self.fov_x
             fov_y = self.fov_y
-        
+            
         fx_value = width / (2 * math.tan(math.radians(fov_x / 2)))
         fy_value = height / (2 * math.tan(math.radians(fov_y / 2)))
         
@@ -598,6 +637,7 @@ class RenderStateMachine(threading.Thread):
         
         assert isinstance(camera, Cameras)
         outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
+
         # Extrahiere die Dichtewerte und Dichtepositionen
         all_densities = []
         all_density_locations = []
@@ -617,6 +657,9 @@ class RenderStateMachine(threading.Thread):
         for ray_locations, ray_densities in zip(all_density_locations, all_densities):
             if ray_densities.numel() == 0:
                 continue
+            
+            if self.max_distance.value > 0:
+                ray_locations, ray_densities = self.filter_max_distance(ray_locations, ray_densities)
             
             # takte the point which is nearest to nearestDistanceToCamera
             if showNearesDensity:
@@ -645,12 +688,11 @@ class RenderStateMachine(threading.Thread):
                     filtered_densities.append(density)
                     
             else:
-                # transmittance methode: -------------------------------------------------------------------------------------------
                 distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
                 if distance is not None:
                     filtered_locations.append(location.tolist()) #type: ignore
                     filtered_densities.append(density.item()) #type: ignore
-                       
+                    
         filtered_locations = torch.tensor(filtered_locations)
         filtered_densities = torch.tensor(filtered_densities)
 
@@ -660,6 +702,7 @@ class RenderStateMachine(threading.Thread):
         if plot_density:
             print("Plotting")
             import open3d as o3d
+
             # 3D point cloud visualisieren
             point_cloud = o3d.geometry.PointCloud()
             point_cloud.points = o3d.utility.Vector3dVector(filtered_locations)
@@ -668,14 +711,16 @@ class RenderStateMachine(threading.Thread):
             o3d.visualization.ViewControl() # type: ignore
             o3d.visualization.draw_geometries([point_cloud]) # type: ignore
         
-        
         if not plot_density and clickable == None and not showNearesDensity and not showSingelRayInf:
             if len(self.mesh_objs) > 0:
                 self.delete_point_cloud()
             
             Debugging.log("filtered_locations", filtered_locations.shape)
-            obj = self.viewer.viser_server.scene.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=self.point_cloud_color.value, point_size=self.point_cloud_base_size.value, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
-            self.mesh_objs.append(obj)
+            if filtered_locations.shape != (0,):
+                obj = self.viewer.viser_server.scene.add_point_cloud(name="density", points=filtered_locations*VISER_NERFSTUDIO_SCALE_RATIO, colors=self.point_cloud_color.value, point_size=self.point_cloud_base_size.value, wxyz=(1.0, 0.0, 0.0, 0.0), position=(0.0, 0.0, 0.0), visible=True)
+                self.mesh_objs.append(obj)
+            else: 
+                print("no data")
         
         if clickable != None or measure[0] != False:
             if len(self.mesh_objs) > 0:
@@ -684,10 +729,21 @@ class RenderStateMachine(threading.Thread):
             for index, (location, density) in enumerate(zip(filtered_locations, filtered_densities)):
                 self.add_point_as_mesh(location, index, density, measure=measure)
                 
+    def filter_max_distance(self, ray_locations, ray_densities):
+        filtered_locations = []
+        filtered_densities = []
+
+        for location, density in zip(ray_locations[1:], ray_densities[1:]):
+            distance = self.compute_distance(self.frustum.position, location)
+            if distance <= self.max_distance.value:
+                filtered_locations.append(location)
+                filtered_densities.append(density)
+
+        return filtered_locations, filtered_densities
+        
     # concept of transmittance T(t), describes the probability of a photon to pass through a medium without being absorbed
     # If the transmittance is low, the photon is more likely to be absorbed. Start with transmittance = 1 and multiply it with the transmittance of each point along the ray.
-    
-    def find_collision_with_transmittance(self, ray_locations, ray_densities, transmission_threshold=0.01):
+    def find_collision_with_transmittance(self, ray_locations, ray_densities, transmission_threshold=1e-200):
         """
         Finds the collision point along a ray based on transmission values.
         
@@ -697,44 +753,43 @@ class RenderStateMachine(threading.Thread):
         
         returns: Distance from the origin to the collision point, the collision location and density.
         """
-        total_distance = 0.0
         transmittance = 1.0  # Initial transmittance
         origin = ray_locations[0]
-
+        
         for location, density in zip(ray_locations[1:], ray_densities[1:]):
             distance = self.compute_distance(origin, location)
-            total_distance += distance
+                
             delta_transmittance = torch.exp(-density * distance)
             transmittance *= delta_transmittance
-
+            
             if transmittance < transmission_threshold:
-                return total_distance, location, density
+                return distance, location, density
 
         return None, None, None  # No collision found
                 
-    def find_collision(self, ray_locations, ray_densities, threshold):
-        """
-        Finds the collision point along a ray based on density values.
+    # def find_collision(self, ray_locations, ray_densities, threshold):
+    #     """
+    #     Finds the collision point along a ray based on density values.
         
-        ray_locations: Tensor of 3D coordinates representing points along the ray.
-        ray_densities: Tensor of density values corresponding to each point.
-        threshold: Cumulative density value at which a collision is detected.
+    #     ray_locations: Tensor of 3D coordinates representing points along the ray.
+    #     ray_densities: Tensor of density values corresponding to each point.
+    #     threshold: Cumulative density value at which a collision is detected.
         
-        returns: Distance from the origin to the collision point, the collision location and density.
-        """
-        cumulative_density = 0.0
-        total_distance = 0.0
-        origin = ray_locations[0]
+    #     returns: Distance from the origin to the collision point, the collision location and density.
+    #     """
+    #     cumulative_density = 0.0
+    #     total_distance = 0.0
+    #     origin = ray_locations[0]
 
-        for location, density in zip(ray_locations[1:], ray_densities[1:]):
-            distance = self.compute_distance(origin, location)
-            total_distance += distance
-            cumulative_density += density.item() * distance
+    #     for location, density in zip(ray_locations[1:], ray_densities[1:]):
+    #         distance = self.compute_distance(origin, location)
+    #         total_distance += distance
+    #         cumulative_density += density.item() * distance
             
-            if cumulative_density >= threshold:
-                return total_distance, location, density
+    #         if cumulative_density >= threshold:
+    #             return total_distance, location, density
 
-        return None, None, None  # no collision found
+    #     return None, None, None  # no collision found
         
     def add_point_as_mesh(self, location, index, density, scale_factor=1, measure=[False, 0]):
         
@@ -776,7 +831,7 @@ class RenderStateMachine(threading.Thread):
         distance = float(distance) if isinstance(distance, float) else distance
         density = density.item() if isinstance(density, torch.Tensor) else density
         
-        self.csv_filename = 'ray_information.csv'
+        self.csv_filename = 'validation.csv'
         try:
             with open(self.csv_filename, 'x', newline='') as csvfile:
                 csvwriter = csv.writer(csvfile)
@@ -920,7 +975,6 @@ class RenderStateMachine(threading.Thread):
                 self.frustum_wxyz_y.value = q_y
                 self.frustum_wxyz_z.value = q_z
 
- 
     def delete_point_cloud(self):
         if len(self.mesh_objs) > 0:
             for obj in self.mesh_objs:
