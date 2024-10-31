@@ -434,120 +434,224 @@ class RenderStateMachine(threading.Thread):
 
         
     def _scan_density(self) -> None:
-            print_list = []
-            side_distance = 0
-            for side in range(4):
-                if side == 0:
-                    side_distance = 1
-                    self.frustum.position = side_distance + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
-                elif side == 1:
-                    self.frustum.position = side_distance + self.x_omni, 1.1 + self.y_omni, 0.9 + self.z_omni
-                elif side == 2:
-                    side_distance = 4
-                    self.frustum.position = side_distance + self.x_omni, + -5.9 + self.y_omni, 1.9 + self.z_omni
-                else:
-                    self.frustum.position = side_distance + self.x_omni, + -5.9 + self.y_omni, 0.9 + self.z_omni
-                for horizont in range(8):
-                    for vertical in range(8):
-                        x, y, z = self.frustum.position #type: ignore
-                        self.frustum.position = side_distance, y, z
-                            
-                        for deep in range(8):
-                            x, y, z = self.frustum.position #type: ignore
-                            real_distance = 0
-
-                            Rv = vtf.SO3(wxyz=self.frustum.wxyz)
-                            Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
-                            Rv = torch.tensor(Rv.as_matrix())
-                            origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
-                            c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
-                            
-                            fov_x = self.fov_x
-                            fov_y = self.fov_y
-                            fx_value = self.width / (2 * math.tan(math.radians(fov_x / 2)))
-                            fy_value = self.height / (2 * math.tan(math.radians(fov_y / 2)))
-                            
-                            fx = torch.tensor([[fx_value]], device='cuda:0')
-                            fy = torch.tensor([[fy_value]], device='cuda:0')
-                            cx = torch.tensor([[self.width / 2]], device='cuda:0')
-                            cy = torch.tensor([[self.height / 2]], device='cuda:0')
-                            
-                            camera = Cameras(
-                                camera_to_worlds=c2w,
-                                fx=fx,
-                                fy=fy,
-                                cx=cx,
-                                cy=cy,
-                                width=torch.tensor([[self.width]]),
-                                height=torch.tensor([[self.height]]),
-                                distortion_params=None,
-                                camera_type=10,
-                                times=torch.tensor([[0.]], device='cuda:0')
-                            )
-                            
-                            assert isinstance(camera, Cameras)
-                            outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
-
-                            all_densities = []
-                            all_density_locations = []
-                            
-                            for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
-                                if densities.numel() > 0:
-                                    all_densities.append(densities)
-                                if locations.numel() > 0:
-                                    all_density_locations.append(locations)
-                                    
-                            all_densities = torch.cat(all_densities)
-                            all_density_locations = torch.cat(all_density_locations)
-                    
-                            filtered_distances = []
-                            filtered_densities = []
-                            filtered_diff = []
-                            
-                            for ray_locations, ray_densities in zip(all_density_locations, all_densities):
-                                if ray_densities.numel() == 0:
-                                    continue
-                                
-                                distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
-                                distance = self.compute_distance(self.frustum.position, location)
-                                real_distance = round(distance - 1)
-                                diff = real_distance - (distance - 1)
-                                if type(density) != None:
-                                    density = density.cpu().numpy() #type: ignore
-                                    
-                                filtered_distances.append(distance)
-                                filtered_densities.append(float(density)) #type: ignore
-                                filtered_diff.append(diff) #type: ignore
-                            
-                            for distance, density, diff in zip(filtered_distances, filtered_densities, filtered_diff):
-                                print_list.append([real_distance, distance-1, diff, density])
-                                self.print_single_ray_informations(print_list)
-                                print_list.clear()
-                                self.ray_id += 1
-                                    
-                            self.frustum.position = x + 0.4, y, z #type: ignore
-                            x, y, z = self.frustum.position #type: ignore
-                        self.frustum.position = x, y + 0.1, z #type: ignore
-                    x, y, z = self.frustum.position #type: ignore
-                    self.frustum.position = x, y - 0.8, z - 0.1
-                self.side_id += 1
-                
-    def print_single_ray_informations(self, print_list):
-        self.csv_filename = 'validation.csv'
-            # "side id" "id", "location", "distance", "density", rgb
-        try:
-            with open(self.csv_filename, 'x', newline='') as csvfile:
-                csvwriter = csv.writer(csvfile)
-                headers = ["side_id", "ray_id", "real_distance", "distance", "diff", "density"]
-                csvwriter.writerow(headers)
-        except FileExistsError:
-            pass
+        print_list = []
         
-        for i, info in enumerate(print_list):
-            with open(self.csv_filename, 'a', newline='') as csvfile:
-                csvwriter = csv.writer(csvfile)
-                row = [self.side_id] + [self.ray_id] + info
-                csvwriter.writerow(row)
+        for v in range(50):
+            Rv = vtf.SO3(wxyz=self.frustum.wxyz)
+            Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
+            Rv = torch.tensor(Rv.as_matrix())
+            origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+            c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
+            
+            fov_x = self.fov_x
+            fov_y = self.fov_y
+            fx_value = self.width / (2 * math.tan(math.radians(fov_x / 2)))
+            fy_value = self.height / (2 * math.tan(math.radians(fov_y / 2)))
+            
+            fx = torch.tensor([[fx_value]], device='cuda:0')
+            fy = torch.tensor([[fy_value]], device='cuda:0')
+            cx = torch.tensor([[self.width / 2]], device='cuda:0')
+            cy = torch.tensor([[self.height / 2]], device='cuda:0')
+            
+            camera = Cameras(
+                camera_to_worlds=c2w,
+                fx=fx,
+                fy=fy,
+                cx=cx,
+                cy=cy,
+                width=torch.tensor([[self.width]]),
+                height=torch.tensor([[self.height]]),
+                distortion_params=None,
+                camera_type=10,
+                times=torch.tensor([[0.]], device='cuda:0')
+            )
+            
+            assert isinstance(camera, Cameras)
+            outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
+
+            all_densities = []
+            all_density_locations = []
+            
+            for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
+                if densities.numel() > 0:
+                    all_densities.append(densities)
+                if locations.numel() > 0:
+                    all_density_locations.append(locations)
+                    
+            all_densities = torch.cat(all_densities)
+            all_density_locations = torch.cat(all_density_locations)
+
+            filtered_distances = []
+            
+            for ray_locations, ray_densities in zip(all_density_locations, all_densities):
+                if ray_densities.numel() == 0:
+                    continue
+                
+                distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
+                distance = self.compute_distance(self.frustum.position, location)
+                    
+                filtered_distances.append(distance)
+        
+            for distance in filtered_distances:
+                print_list.append(distance)
+                
+            self.add_column_to_csv(print_list)
+            print_list.clear()
+            x, y, z = self.frustum.position #type: ignore
+            self.frustum.position = x + 0.05, y, z #type: ignore
+     
+    def add_column_to_csv(self, new_column_data):
+        self.csv_filename = 'floor.csv'
+
+        # Lesen der vorhandenen Daten
+        try:
+            with open(self.csv_filename, 'r', newline='') as csvfile:
+                reader = csv.reader(csvfile, delimiter=';')
+                data = list(reader)
+        except FileNotFoundError:
+            # Falls die Datei nicht existiert, initialisieren wir leere Daten
+            data = []
+
+        # Falls keine Daten vorhanden sind, erstellen wir neue Zeilen
+        if not data:
+            for value in new_column_data:
+                data.append([str(value)])
+        else:
+            # Fügen die neue Spalte zu den vorhandenen Zeilen hinzu
+            for i in range(len(new_column_data)):
+                if i < len(data):
+                    data[i].append(str(new_column_data[i]))
+                else:
+                    # Falls es mehr neue Daten gibt als vorhandene Zeilen
+                    row = [''] * (len(data[0]) - 1) + [str(new_column_data[i])]
+                    data.append(row)
+
+        # Schreiben der aktualisierten Daten zurück in die CSV-Datei
+        with open(self.csv_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerows(data)       
+            
+    # def print_single_ray_informations(self, print_list):
+    #     self.csv_filename = 'floor.csv'
+    #     with open(self.csv_filename, 'a', newline='') as csvfile:
+    #         csvwriter = csv.writer(csvfile, delimiter=';')
+    #         csvwriter.writerow(print_list[0])
+    # def _scan_density(self) -> None:
+    #         print_list = []
+    #         side_distance = 0
+    #         for side in range(4):
+    #             if side == 0:
+    #                 side_distance = 1
+    #                 self.frustum.position = side_distance + self.x_omni, 1.1 + self.y_omni, 1.9 + self.z_omni
+    #             elif side == 1:
+    #                 self.frustum.position = side_distance + self.x_omni, 1.1 + self.y_omni, 0.9 + self.z_omni
+    #             elif side == 2:
+    #                 side_distance = 4
+    #                 self.frustum.position = side_distance + self.x_omni, + -5.9 + self.y_omni, 1.9 + self.z_omni
+    #             else:
+    #                 self.frustum.position = side_distance + self.x_omni, + -5.9 + self.y_omni, 0.9 + self.z_omni
+    #             for horizont in range(8):
+    #                 for vertical in range(8):
+    #                     x, y, z = self.frustum.position #type: ignore
+    #                     self.frustum.position = side_distance, y, z
+                            
+    #                     # for deep in range(8):
+    #                     x, y, z = self.frustum.position #type: ignore
+    #                     real_distance = 0
+
+    #                     Rv = vtf.SO3(wxyz=self.frustum.wxyz)
+    #                     Rv = Rv @ vtf.SO3.from_x_radians(np.pi)
+    #                     Rv = torch.tensor(Rv.as_matrix())
+    #                     origin = torch.tensor(self.frustum.position, dtype=torch.float64) / VISER_NERFSTUDIO_SCALE_RATIO
+    #                     c2w = torch.concatenate([Rv, origin[:, None]], dim=1)
+                        
+    #                     fov_x = self.fov_x
+    #                     fov_y = self.fov_y
+    #                     fx_value = self.width / (2 * math.tan(math.radians(fov_x / 2)))
+    #                     fy_value = self.height / (2 * math.tan(math.radians(fov_y / 2)))
+                        
+    #                     fx = torch.tensor([[fx_value]], device='cuda:0')
+    #                     fy = torch.tensor([[fy_value]], device='cuda:0')
+    #                     cx = torch.tensor([[self.width / 2]], device='cuda:0')
+    #                     cy = torch.tensor([[self.height / 2]], device='cuda:0')
+                        
+    #                     camera = Cameras(
+    #                         camera_to_worlds=c2w,
+    #                         fx=fx,
+    #                         fy=fy,
+    #                         cx=cx,
+    #                         cy=cy,
+    #                         width=torch.tensor([[self.width]]),
+    #                         height=torch.tensor([[self.height]]),
+    #                         distortion_params=None,
+    #                         camera_type=10,
+    #                         times=torch.tensor([[0.]], device='cuda:0')
+    #                     )
+                        
+    #                     assert isinstance(camera, Cameras)
+    #                     outputs = self.viewer.get_model().get_outputs_for_camera(camera, width=self.width, height=self.height)
+
+    #                     all_densities = []
+    #                     all_density_locations = []
+                        
+    #                     for densities, locations in zip(outputs["densities"], outputs["densities_locations"]):
+    #                         if densities.numel() > 0:
+    #                             all_densities.append(densities)
+    #                         if locations.numel() > 0:
+    #                             all_density_locations.append(locations)
+                                
+    #                     all_densities = torch.cat(all_densities)
+    #                     all_density_locations = torch.cat(all_density_locations)
+                
+    #                     filtered_distances = []
+    #                     filtered_densities = []
+    #                     filtered_diff = []
+                        
+    #                     for ray_locations, ray_densities in zip(all_density_locations, all_densities):
+    #                         if ray_densities.numel() == 0:
+    #                             continue
+                            
+    #                         distance, location, density = self.find_collision_with_transmittance(ray_locations, ray_densities)
+    #                         distance = self.compute_distance(self.frustum.position, location)
+    #                         real_distance = round(distance - 1)
+    #                         diff = real_distance - (distance - 1)
+    #                         if type(density) != None:
+    #                             density = density.cpu().numpy() #type: ignore
+                                
+    #                         filtered_distances.append(distance)
+    #                         filtered_densities.append(float(density)) #type: ignore
+    #                         filtered_diff.append(diff) #type: ignore
+                        
+    #                     for distance, density, diff in zip(filtered_distances, filtered_densities, filtered_diff):
+    #                         print_list.append([real_distance, distance-1, diff, density])
+    #                         self.print_single_ray_informations(print_list)
+    #                         print_list.clear()
+    #                         self.ray_id += 1
+                                
+    #                         self.frustum.position = x + 0.4, y, z #type: ignore
+    #                         x, y, z = self.frustum.position #type: ignore
+    #                     self.frustum.position = x, y + 0.1, z #type: ignore
+    #                 x, y, z = self.frustum.position #type: ignore
+    #                 self.frustum.position = x, y - 0.8, z - 0.1
+    #             self.side_id += 1
+                
+                
+    # def print_single_ray_informations(self, print_list):
+    #     self.csv_filename = 'validation.csv'
+    #         # "side id" "id", "location", "distance", "density", rgb
+    #     try:
+    #         with open(self.csv_filename, 'x', newline='') as csvfile:
+    #             csvwriter = csv.writer(csvfile)
+    #             headers = ["side_id", "ray_id", "real_distance", "distance", "diff", "density"]
+    #             csvwriter.writerow(headers)
+    #     except FileExistsError:
+    #         pass
+        
+    #     for i, info in enumerate(print_list):
+    #         with open(self.csv_filename, 'a', newline='') as csvfile:
+    #             csvwriter = csv.writer(csvfile)
+    #             row = [self.side_id] + [self.ray_id] + info
+    #             csvwriter.writerow(row)
         
     def generate_lidar(self, **kwargs) -> None:
         """Show the density in the viewer
@@ -954,7 +1058,12 @@ class RenderStateMachine(threading.Thread):
         a = a.cpu().numpy() if isinstance(a, torch.Tensor) else a
         b = b.cpu().numpy() if isinstance(b, torch.Tensor) else b
 
-        return (np.linalg.norm(np.array(a) - np.array(b))) / self.compute_scale_factor
+        try:
+            return (np.linalg.norm(np.array(a) - np.array(b))) / self.compute_scale_factor
+        except:
+            return -1
+            
+        
     
     def set_perspectiv_camera(self, type: str):
         
