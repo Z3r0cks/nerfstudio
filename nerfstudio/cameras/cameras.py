@@ -894,15 +894,15 @@ class Cameras(TensorDataclass):
                 if fov_y[0, 0] < 0:
                     fov_y = 2 * math.pi + fov_y
                 
-                theta = torch.linspace(-fov_x[0, 0].item() / 2, fov_x[0, 0].item() / 2, steps=width, device='cuda:0')  # horizontaler FOV
-                phi = torch.linspace(-fov_y[0, 0].item() / 2, fov_y[0, 0].item() / 2, steps=height, device='cuda:0')  # vertikaler FOv
+                theta = torch.linspace(-fov_x[0, 0].item() / 2, fov_x[0, 0].item() / 2, steps=width, device='cuda:0')  # horicontal FOV
+                phi = torch.linspace(-fov_y[0, 0].item() / 2, fov_y[0, 0].item() / 2, steps=height, device='cuda:0')  # vertical FOv
 
                 theta, phi = torch.meshgrid(theta, phi, indexing='xy')
                 
                 directions_stack = torch.zeros((3, height, width, 3), device='cuda:0')
-                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x-Komponente
-                directions_stack[0, :, :, 1] = torch.sin(phi)  # y-Komponente
-                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z-Komponente
+                directions_stack[0, :, :, 0] = torch.cos(phi) * torch.sin(theta)  # x-component
+                directions_stack[0, :, :, 1] = torch.sin(phi)  # y-component
+                directions_stack[0, :, :, 2] = torch.cos(phi) * torch.cos(theta)  # z-component
                 
                 directions_stack = -directions_stack  
 
